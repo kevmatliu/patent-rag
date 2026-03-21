@@ -1,0 +1,12 @@
+backend/test-uploads/
+.env.example
+image_extract.txt
+test_patents.txt
+backend/uploads/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.venv/
+**/.venv_sys/
+backend/models/
+frontend/node_modules/
