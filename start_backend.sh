@@ -21,7 +21,23 @@ if [ ! -f "$BACKEND_DIR/.env" ]; then
   exit 1
 fi
 
-source "$VENV_DIR/bin/activate"
+set -a
+source "$BACKEND_DIR/.env"
+set +a
+
+if [ ! -f "$MOLSCRIBE_MODEL_PATH" ]; then
+  echo "MolScribe model file was not found:"
+  echo "  $MOLSCRIBE_MODEL_PATH"
+  echo "Update backend/.env or run bash $ROOT_DIR/setup_local.sh"
+  exit 1
+fi
+
+if [ ! -d "$CHEMBERTA_MODEL_PATH" ]; then
+  echo "ChemBERTa model directory was not found:"
+  echo "  $CHEMBERTA_MODEL_PATH"
+  echo "Update backend/.env or run bash $ROOT_DIR/setup_local.sh"
+  exit 1
+fi
 
 export PYTHONPATH="$BACKEND_DIR"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
@@ -32,4 +48,4 @@ export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 cd "$BACKEND_DIR"
 
 echo "Starting backend on http://127.0.0.1:8000"
-exec uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app
+exec "$VENV_DIR/bin/uvicorn" app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app

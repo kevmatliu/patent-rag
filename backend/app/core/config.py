@@ -18,11 +18,6 @@ class Settings(BaseSettings):
         alias="FAISS_MAPPING_PATH",
     )
     model_device: str = Field(default="cpu", alias="MODEL_DEVICE")
-    ocr_backend: str = Field(default="decimer", alias="OCR_BACKEND")
-    decimer_model_path: Path = Field(
-        default=Path("./models/decimer"),
-        alias="DECIMER_MODEL_PATH",
-    )
     molscribe_model_path: Path = Field(
         default=Path("./models/molscribe/swin_base_char_aux_1m680k.pth"),
         alias="MOLSCRIBE_MODEL_PATH",
@@ -60,12 +55,6 @@ class Settings(BaseSettings):
             self.search_tmp_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
-
-    def normalized_ocr_backend(self) -> str:
-        backend = self.ocr_backend.strip().lower()
-        if backend not in {"decimer", "molscribe"}:
-            raise ValueError("OCR_BACKEND must be either 'decimer' or 'molscribe'")
-        return backend
 
 
 @lru_cache(maxsize=1)

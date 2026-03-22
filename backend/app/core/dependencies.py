@@ -4,7 +4,6 @@ from functools import lru_cache
 
 from app.core.config import Settings, get_settings
 from app.services.chemberta_service import ChemBertaService
-from app.services.decimer_service import DecimerService
 from app.services.extraction_service import ExtractionService
 from app.services.health_service import HealthService
 from app.services.molscribe_service import MolScribeService
@@ -25,15 +24,6 @@ def get_extraction_service() -> ExtractionService:
 
 
 @lru_cache(maxsize=1)
-def get_decimer_service() -> DecimerService:
-    settings: Settings = get_settings()
-    return DecimerService(
-        model_path=settings.decimer_model_path,
-        device=settings.model_device,
-    )
-
-
-@lru_cache(maxsize=1)
 def get_molscribe_service() -> MolScribeService:
     settings: Settings = get_settings()
     return MolScribeService(
@@ -44,11 +34,7 @@ def get_molscribe_service() -> MolScribeService:
 
 @lru_cache(maxsize=1)
 def get_smiles_recognition_service() -> SmilesRecognitionService:
-    settings: Settings = get_settings()
-    backend = settings.normalized_ocr_backend()
-    if backend == "molscribe":
-        return get_molscribe_service()
-    return get_decimer_service()
+    return get_molscribe_service()
 
 
 @lru_cache(maxsize=1)

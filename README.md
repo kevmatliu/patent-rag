@@ -1,6 +1,6 @@
 # Chemical Patent Search Monorepo v2
 
-Local-first chemical patent search with FastAPI, React, SQLite, and FAISS. The backend ingests Google Patents URLs, extracts compound images through the included `image_extract.py`, converts images to SMILES with a selectable OCR backend (`DECIMER` or `MolScribe`), embeds SMILES with ChemBERTa, persists records in SQLite, and serves image-based similarity search through a CPU FAISS index.
+Local-first chemical patent search with FastAPI, React, SQLite, and FAISS. The backend ingests Google Patents URLs, extracts compound images through the included `image_extract.py`, converts images to SMILES with MolScribe, embeds SMILES with ChemBERTa, persists records in SQLite, and serves image-based similarity search through a CPU FAISS index.
 
 If you just want to get the app running locally, start with [SETUP.md](/Users/kevinliu/Desktop/patent-rag-chem/v2/SETUP.md).
 
@@ -64,8 +64,6 @@ DATABASE_URL=sqlite:///./app.db
 FAISS_INDEX_PATH=./faiss_index/index.bin
 FAISS_MAPPING_PATH=./faiss_index/mapping.json
 MODEL_DEVICE=cpu
-OCR_BACKEND=decimer
-DECIMER_MODEL_PATH=/absolute/path/to/local/decimer/assets
 MOLSCRIBE_MODEL_PATH=/absolute/path/to/local/molscribe/model.ckpt
 CHEMBERTA_MODEL_PATH=/absolute/path/to/local/chemberta/model
 UPLOAD_DIR=./uploads
@@ -74,7 +72,6 @@ SEARCH_TMP_DIR=./uploads/search_tmp
 ```
 
 `MODEL_DEVICE` is device-aware for future GPU support, but this v2 setup is designed for CPU-only local execution.
-Set `OCR_BACKEND=molscribe` if you want to use MolScribe instead of DECIMER for image-to-SMILES.
 
 ## Backend run
 
@@ -204,9 +201,9 @@ Startup behavior:
 
 ## Notes on local models
 
-- DECIMER and MolScribe are imported lazily
+- MolScribe is imported lazily
 - ChemBERTa is loaded lazily from the local path specified in `CHEMBERTA_MODEL_PATH`
-- the health endpoint reports extractor import failures, the active OCR backend, and missing local model paths clearly
+- the health endpoint reports extractor import failures and missing local model paths clearly
 - no cloud inference is used
 
 ## Future GPU support

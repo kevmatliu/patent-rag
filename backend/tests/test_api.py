@@ -38,8 +38,8 @@ class FakeExtractionService:
         return [{"image_path": str(self.image_path), "page_number": 7}]
 
 
-class FakeDecimerService:
-    name = "decimer"
+class FakeMolScribeService:
+    name = "molscribe"
     device = "cpu"
 
     def image_to_smiles(self, image_path: str) -> str:
@@ -171,7 +171,7 @@ def test_process_images_updates_rows(client, session_factory, tmp_path):
         session.commit()
 
     processing_service = ProcessingService(
-        smiles_recognition_service=FakeDecimerService(),
+        smiles_recognition_service=FakeMolScribeService(),
         chemberta_service=FakeChemBertaService(),
         vector_index_service=FakeVectorIndexService(),
     )
@@ -210,7 +210,7 @@ def test_process_images_job_contains_progress_logs(client, session_factory, tmp_
         session.commit()
 
     processing_service = ProcessingService(
-        smiles_recognition_service=FakeDecimerService(),
+        smiles_recognition_service=FakeMolScribeService(),
         chemberta_service=FakeChemBertaService(),
         vector_index_service=FakeVectorIndexService(),
     )
@@ -221,7 +221,7 @@ def test_process_images_job_contains_progress_logs(client, session_factory, tmp_
 
     body = wait_for_job(client, response.json()["job_id"])
     assert body["status"] == "completed"
-    assert any("running DECIMER" in log["message"] for log in body["logs"])
+    assert any("running MOLSCRIBE" in log["message"] for log in body["logs"])
     assert body["summary"]["processed_count"] == 1
 
 

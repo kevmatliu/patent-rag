@@ -12,7 +12,6 @@ from app.api import search as search_api
 from app.core.config import get_settings
 from app.core.dependencies import (
     get_chemberta_service,
-    get_decimer_service,
     get_extraction_service,
     get_health_service,
     get_molscribe_service,
@@ -35,15 +34,12 @@ def configured_settings(tmp_path: Path):
     settings.upload_dir = tmp_path / "uploads"
     settings.extracted_image_dir = settings.upload_dir / "extracted"
     settings.search_tmp_dir = settings.upload_dir / "search_tmp"
-    settings.ocr_backend = "decimer"
-    settings.decimer_model_path = tmp_path / "models" / "decimer"
     settings.molscribe_model_path = tmp_path / "models" / "molscribe" / "model.pth"
     settings.chemberta_model_path = tmp_path / "models" / "chemberta"
     settings.ensure_directories()
 
     for cache in (
         get_extraction_service,
-        get_decimer_service,
         get_molscribe_service,
         get_smiles_recognition_service,
         get_chemberta_service,

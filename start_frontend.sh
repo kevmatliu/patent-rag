@@ -4,9 +4,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$ROOT_DIR/frontend"
+export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is not installed or not on PATH. Please install Node.js first."
+  exit 1
+fi
 
 if ! command -v npm >/dev/null 2>&1; then
-  echo "npm is not installed. Please install Node.js and npm first."
+  echo "npm is not installed or not on PATH. Please install Node.js and npm first."
   exit 1
 fi
 

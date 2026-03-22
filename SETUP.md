@@ -31,7 +31,7 @@ cd v2
 
 ## 2. Run the one-time setup script
 
-This installs backend Python packages, installs frontend packages, and creates `backend/.env` if it does not exist yet.
+This installs backend Python packages, installs frontend packages, and rewrites `backend/.env` with the local MolScribe-only configuration.
 
 ```bash
 bash setup_local.sh
@@ -42,7 +42,7 @@ What this does:
 - creates `v2/backend/.venv` if needed
 - installs `v2/backend/requirements.txt`
 - installs frontend packages in `v2/frontend/node_modules`
-- creates `v2/backend/.env` using your local folder paths
+- writes `v2/backend/.env` using your local folder paths
 
 ## 3. Start the backend
 
@@ -125,7 +125,6 @@ v2/backend/.env
 
 Make sure these paths point to real files/folders on your machine:
 
-- `DECIMER_MODEL_PATH`
 - `MOLSCRIBE_MODEL_PATH`
 - `CHEMBERTA_MODEL_PATH`
 
