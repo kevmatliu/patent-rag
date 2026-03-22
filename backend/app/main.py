@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.admin import router as admin_router
 from app.api.compounds import router as compounds_router
 from app.api.health import router as health_router
 from app.api.images import router as images_router
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     )
 
     app.mount("/static", StaticFiles(directory=str(settings.upload_dir.resolve())), name="static")
+    app.include_router(admin_router)
     app.include_router(health_router)
     app.include_router(compounds_router)
     app.include_router(jobs_router)

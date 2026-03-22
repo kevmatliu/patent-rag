@@ -57,6 +57,18 @@ button {
   color: #4f6673;
 }
 
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-status {
+  margin-top: 12px;
+}
+
 .nav {
   display: flex;
   gap: 12px;

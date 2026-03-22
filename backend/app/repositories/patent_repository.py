@@ -108,7 +108,7 @@ class PatentRepository:
 
         summary_statement = (
             select(
-                func.count(Patent.id).label("total_patents"),
+                func.count(func.distinct(Patent.id)).label("total_patents"),
                 func.count(func.distinct(case((CompoundImage.processing_status == ProcessingStatus.PROCESSED, Patent.id), else_=None))).label("processed_patents"),
                 func.count(func.distinct(case((CompoundImage.processing_status == ProcessingStatus.PENDING, Patent.id), else_=None))).label("unprocessed_patents"),
             )

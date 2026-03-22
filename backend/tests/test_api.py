@@ -13,6 +13,8 @@ from app.core.dependencies import (
 from app.repositories.job_repository import JobRepository
 from app.models.compound_image import CompoundImage
 from app.models.enums import ExtractionStatus, ProcessingStatus
+from app.models.job_log import JobLog
+from app.models.job_run import JobRun
 from app.models.patent import Patent
 from app.repositories.compound_image_repository import CompoundImageRepository
 from app.schemas.image_processing import SearchResponse, SearchResultItem
@@ -381,6 +383,29 @@ def test_patent_metadata_returns_summary_and_rows(client, session_factory):
     assert {"US20250042916A1", "WO2025015269A1"} == codes
 
 
+def test_patent_metadata_total_patents_counts_distinct_patents(client, session_factory):
+    with Session(session_factory) as session:
+        patent = Patent(
+            source_url="https://patents.google.com/patent/US20250042916A1/en",
+            patent_slug="US20250042916A1",
+        )
+        session.add(patent)
+        session.commit()
+        session.refresh(patent)
+
+        session.add(CompoundImage(patent_id=patent.id, image_path="compound-1.png"))
+        session.add(CompoundImage(patent_id=patent.id, image_path="compound-2.png"))
+        session.add(CompoundImage(patent_id=patent.id, image_path="compound-3.png"))
+        session.commit()
+
+    response = client.get("/api/patents/metadata?offset=0&limit=20")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["total_patents"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["total_compounds"] == 3
+
+
 def test_patent_codes_returns_all_slugs(client, session_factory):
     with Session(session_factory) as session:
         session.add(Patent(source_url="https://patents.google.com/patent/US20250042916A1/en", patent_slug="US20250042916A1"))
@@ -390,3 +415,55 @@ def test_patent_codes_returns_all_slugs(client, session_factory):
     response = client.get("/api/patents/codes")
     assert response.status_code == 200
     assert response.json() == ["US20250042916A1", "WO2025015269A1"]
+
+
+def test_reset_database_clears_rows_files_and_faiss(client, session_factory, configured_settings):
+    extracted_dir = configured_settings.extracted_image_dir / "US20250042916A1"
+    search_dir = configured_settings.search_tmp_dir
+    extracted_dir.mkdir(parents=True, exist_ok=True)
+    search_dir.mkdir(parents=True, exist_ok=True)
+    (extracted_dir / "compound.png").write_bytes(b"png-image")
+    (search_dir / "query.png").write_bytes(b"query-image")
+    configured_settings.faiss_index_path.parent.mkdir(parents=True, exist_ok=True)
+    configured_settings.faiss_index_path.write_bytes(b"index")
+    configured_settings.faiss_mapping_path.write_text("[]", encoding="utf-8")
+
+    with Session(session_factory) as session:
+        patent = Patent(
+            source_url="https://patents.google.com/patent/US20250042916A1/en",
+            patent_slug="US20250042916A1",
+        )
+        session.add(patent)
+        session.commit()
+        session.refresh(patent)
+
+        session.add(CompoundImage(patent_id=patent.id, image_path=str(extracted_dir / "compound.png")))
+        session.commit()
+
+        job = JobRun(job_type="image_processing")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+
+        session.add(JobLog(job_id=job.id, level="info", message="hello"))
+        session.commit()
+
+    response = client.post("/api/admin/reset-database")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["patents_deleted"] == 1
+    assert body["compounds_deleted"] == 1
+    assert body["jobs_deleted"] == 1
+    assert body["logs_deleted"] == 1
+    assert body["files_deleted"] == 2
+
+    with Session(session_factory) as session:
+        assert session.exec(select(Patent)).all() == []
+        assert session.exec(select(CompoundImage)).all() == []
+        assert session.exec(select(JobRun)).all() == []
+        assert session.exec(select(JobLog)).all() == []
+
+    assert not configured_settings.faiss_index_path.exists()
+    assert not configured_settings.faiss_mapping_path.exists()
+    assert list(configured_settings.extracted_image_dir.rglob("*")) == []
+    assert list(configured_settings.search_tmp_dir.rglob("*")) == []

@@ -46,4 +46,11 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return handleResponse<T>(response);
 }
 
+export async function apiPostNoBody<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST"
+  });
+  return handleResponse<T>(response);
+}
+
 export { API_BASE_URL };

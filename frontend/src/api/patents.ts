@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPostForm, apiPostJson } from "./client";
+import { apiDelete, apiGet, apiPostForm, apiPostJson, apiPostNoBody } from "./client";
 
 export interface PatentBatchItemResult {
   url: string;
@@ -121,6 +121,14 @@ export interface CompoundSelectionResponse {
   affected_count: number;
 }
 
+export interface ResetDatabaseResponse {
+  patents_deleted: number;
+  compounds_deleted: number;
+  jobs_deleted: number;
+  logs_deleted: number;
+  files_deleted: number;
+}
+
 export function uploadPatents(urls: string[]): Promise<JobAcceptedResponse> {
   return apiPostJson<JobAcceptedResponse>("/api/patents/batch", { urls });
 }
@@ -208,4 +216,8 @@ export function reprocessCompounds(compoundIds: number[]): Promise<JobAcceptedRe
 
 export async function deletePatent(patentCode: string): Promise<CompoundSelectionResponse> {
   return apiDelete<CompoundSelectionResponse>(`/api/compounds/patent/${encodeURIComponent(patentCode)}`);
+}
+
+export function resetDatabase(): Promise<ResetDatabaseResponse> {
+  return apiPostNoBody<ResetDatabaseResponse>("/api/admin/reset-database");
 }
