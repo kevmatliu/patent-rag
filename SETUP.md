@@ -46,7 +46,24 @@ What this does:
 - installs frontend packages in `v2/frontend/node_modules`
 - writes `v2/backend/.env` using your local folder paths
 
-## 3. Start the backend
+## 3. Start everything at once
+
+If you want the simplest option, run:
+
+```bash
+bash start_all.sh
+```
+
+This starts both:
+
+- backend at `http://127.0.0.1:8000`
+- frontend at `http://127.0.0.1:5173`
+
+Press `Ctrl+C` in that terminal to stop both services.
+
+## 4. Or start them separately
+
+If you prefer separate terminals:
 
 Open one terminal tab or window and run:
 
@@ -65,8 +82,6 @@ Useful backend page:
 ```text
 http://127.0.0.1:8000/api/health
 ```
-
-## 4. Start the frontend
 
 Open a second terminal tab or window and run:
 

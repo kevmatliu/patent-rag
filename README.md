@@ -89,6 +89,12 @@ bash start_backend.sh
 
 For first-time local setup, `bash setup_local.sh` also downloads the MolScribe checkpoint and ChemBERTa model files automatically.
 
+If you want to start both services together from `v2/`, run:
+
+```bash
+bash start_all.sh
+```
+
 Backend API base URL:
 
 ```text
