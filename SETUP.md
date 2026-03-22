@@ -31,7 +31,7 @@ cd v2
 
 ## 2. Run the one-time setup script
 
-This installs backend Python packages, installs frontend packages, and rewrites `backend/.env` with the local MolScribe-only configuration.
+This installs backend Python packages, downloads the MolScribe and ChemBERTa model files, installs frontend packages, and rewrites `backend/.env` with the local MolScribe-only configuration.
 
 ```bash
 bash setup_local.sh
@@ -41,6 +41,8 @@ What this does:
 
 - creates `v2/backend/.venv` if needed
 - installs `v2/backend/requirements.txt`
+- downloads the MolScribe checkpoint into `v2/backend/models/molscribe/`
+- downloads the ChemBERTa model files into `v2/backend/models/chemberta/`
 - installs frontend packages in `v2/frontend/node_modules`
 - writes `v2/backend/.env` using your local folder paths
 
