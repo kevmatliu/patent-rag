@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getJobStatus, uploadPatents, type JobLogItem, type PatentBatchItemResult } from "../api/patents";
+import { getJobStatus, uploadPatentPdfs, uploadPatents, type JobLogItem, type PatentBatchItemResult } from "../api/patents";
 import { JobLogPanel } from "../components/JobLogPanel";
 
 function isPatentBatchSummary(summary: unknown): summary is { results: PatentBatchItemResult[] } {
@@ -18,6 +18,7 @@ export function BatchUploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
 
   useEffect(() => {
     if (!jobId) {
@@ -88,6 +89,25 @@ export function BatchUploadPage() {
     }
   };
 
+  const handlePdfSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setResults([]);
+    setLogs([]);
+    setJobStatus("pending");
+
+    try {
+      const response = await uploadPatentPdfs(pdfFiles);
+      setJobId(response.job_id);
+      setJobStatus(response.status);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "PDF upload failed");
+      setJobStatus("failed");
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <section className="panel">
@@ -109,6 +129,30 @@ export function BatchUploadPage() {
           </div>
         </form>
         {error && <p className="status-error">{error}</p>}
+      </section>
+
+      <section className="panel">
+        <form className="grid" onSubmit={handlePdfSubmit}>
+          <div className="field">
+            <label htmlFor="patent-pdfs">Patent PDFs</label>
+            <input
+              id="patent-pdfs"
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+              onChange={(event) => setPdfFiles(Array.from(event.target.files ?? []))}
+            />
+            <p className="muted">
+              Upload one or more PDF files. The patent code will be inferred from each filename, like
+              `US20250042916A1.pdf`.
+            </p>
+          </div>
+          <div>
+            <button className="primary-button" type="submit" disabled={submitting || pdfFiles.length === 0}>
+              {submitting ? "Ingesting..." : "Upload PDFs"}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="panel">

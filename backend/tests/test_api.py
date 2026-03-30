@@ -155,6 +155,29 @@ def test_batch_patent_ingest_persists_page_number(client, session_factory, tmp_p
         assert images[0].page_number == 7
 
 
+def test_pdf_patent_ingest_uses_filename_as_patent_code(client, session_factory, tmp_path):
+    image_path = tmp_path / "compound.png"
+    image_path.write_bytes(b"png-image")
+
+    client.app.dependency_overrides[get_extraction_service] = lambda: FakeExtractionService(image_path)
+
+    response = client.post(
+        "/api/patents/upload-pdfs",
+        files={"files": ("US20250042916A1.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    body = wait_for_job(client, response.json()["job_id"])
+    assert body["status"] == "completed"
+    assert body["summary"]["results"][0]["patent_code"] == "US20250042916A1"
+    assert body["summary"]["results"][0]["extracted_images"] == 1
+
+    with Session(session_factory) as session:
+        patents = session.exec(select(Patent)).all()
+        assert len(patents) == 1
+        assert patents[0].patent_slug == "US20250042916A1"
+
+
 def test_process_images_updates_rows(client, session_factory, tmp_path):
     image_path = tmp_path / "compound.png"
     image_path.write_bytes(b"png-image")

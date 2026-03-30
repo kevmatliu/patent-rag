@@ -1,11 +1,16 @@
 backend/test-uploads/
-.env.example
 image_extract.txt
 test_patents.txt
 backend/uploads/
+backend/app.db
+backend/*.db
+backend/.env
+backend/faiss_index/index.bin
+backend/faiss_index/mapping.json
 **/__pycache__/
 **/*.pyc
 **/*.pyo
+**/.DS_Store
 **/.venv/
 **/.venv_sys/
 backend/models/

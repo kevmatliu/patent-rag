@@ -133,6 +133,12 @@ export function uploadPatents(urls: string[]): Promise<JobAcceptedResponse> {
   return apiPostJson<JobAcceptedResponse>("/api/patents/batch", { urls });
 }
 
+export function uploadPatentPdfs(files: File[]): Promise<JobAcceptedResponse> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  return apiPostForm<JobAcceptedResponse>("/api/patents/upload-pdfs", formData);
+}
+
 export function processImages(
   limit: number,
   order: "oldest" | "newest",
