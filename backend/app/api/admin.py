@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.dependencies import get_vector_index_service
 from app.db.session import get_session
 from app.models.compound_image import CompoundImage
+from app.models.compound_r_group import CompoundRGroup
 from app.models.job_log import JobLog
 from app.models.job_run import JobRun
 from app.models.patent import Patent
@@ -50,12 +51,14 @@ def reset_database(
     settings = get_settings()
 
     compound_count = _scalar_count(session, select(func.count()).select_from(CompoundImage))
+    r_group_count = _scalar_count(session, select(func.count()).select_from(CompoundRGroup))
     patent_count = _scalar_count(session, select(func.count()).select_from(Patent))
     job_count = _scalar_count(session, select(func.count()).select_from(JobRun))
     log_count = _scalar_count(session, select(func.count()).select_from(JobLog))
 
     session.exec(delete(JobLog))
     session.exec(delete(JobRun))
+    session.exec(delete(CompoundRGroup))
     session.exec(delete(CompoundImage))
     session.exec(delete(Patent))
     session.commit()

@@ -8,11 +8,19 @@ from fastapi import UploadFile
 from sqlmodel import Session
 
 from app.core.config import Settings
+from app.models.compound_image import CompoundImage
+from app.models.compound_r_group import CompoundRGroup
 from app.repositories.compound_image_repository import CompoundImageRepository
 from app.schemas.image_processing import SearchResultItem, SearchResponse
 from app.services.chemberta_service import ChemBertaService
 from app.services.smiles_recognition_service import SmilesRecognitionService
 from app.services.vector_index_service import VectorIndexService
+
+from sqlalchemy.orm import aliased
+from sqlmodel import select
+import numpy as np
+from rdkit import Chem
+from app.services.scaffold_analysis import analyze_scaffolds, ScaffoldInput
 
 
 class SearchService:
@@ -92,7 +100,7 @@ class SearchService:
                 SearchResultItem(
                     image_id=image_id,
                     similarity=self._distance_to_similarity(float(item["distance"])),
-                    smiles=compound_row.smiles,
+                    smiles=compound_row.canonical_smiles or compound_row.smiles,
                     image_url=image_url,
                     patent_code=patent_row.patent_slug,
                     page_number=compound_row.page_number,
@@ -119,3 +127,114 @@ class SearchService:
             return self.search_by_image_path(session, image_path=temp_path, k=k)
         finally:
             temp_path.unlink(missing_ok=True)
+
+    def search_by_structure(
+        self,
+        session: Session,
+        *,
+        core_smiles: Optional[str],
+        r_groups: dict[str, str],
+        k: int,
+        progress_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> SearchResponse:
+        # 1. Filter by R-groups exactly
+        statement = select(CompoundImage.id)
+        active_r_groups = {label: sm.strip() for label, sm in r_groups.items() if sm and sm.strip()}
+        
+        for label, r_smiles in active_r_groups.items():
+            alias = aliased(CompoundRGroup)
+            statement = statement.join(alias, alias.compound_id == CompoundImage.id)
+            statement = statement.where(alias.r_label == label, alias.r_group == r_smiles)
+        
+        matched_ids = list(session.exec(statement).all())
+        if not matched_ids:
+            return SearchResponse(query_smiles=core_smiles or "N/A", results=[])
+
+        if progress_callback:
+            progress_callback("info", f"Found {len(matched_ids)} compound(s) matching R-group constraints.")
+
+        # 2. Rank by core similarity if query exists
+        if not core_smiles or not core_smiles.strip():
+            top_ids = matched_ids[:k]
+            # Similarity is 1.0 since no core constraint
+            id_similarity_map = {image_id: 1.0 for image_id in top_ids}
+        else:
+            query_smiles_str = core_smiles.strip()
+            # 1. Standardize query Core to its Reduced Core
+            query_mol = Chem.MolFromSmiles(query_smiles_str)
+            if query_mol:
+                try:
+                    analysis = analyze_scaffolds([ScaffoldInput(compound_id=0, mol=query_mol)])
+                    query_reduced_core = analysis[0].reduced_core or query_smiles_str
+                except Exception:
+                    query_reduced_core = query_smiles_str
+            else:
+                query_reduced_core = query_smiles_str
+
+            query_embedding = self.chemberta_service.smiles_to_embedding(query_reduced_core)
+            query_vec = np.array(query_embedding).astype("float32")
+            norm = np.linalg.norm(query_vec)
+            if norm > 0:
+                query_vec /= norm
+
+            # 2. Get Reduced Cores for all candidates
+            candidates = session.exec(
+                select(CompoundImage.id, CompoundImage.reduced_core)
+                .where(CompoundImage.id.in_(matched_ids))
+            ).all()
+
+            scored: list[tuple[int, float]] = []
+            for image_id, raw_reduced_core in candidates:
+                # Use the reduced_core from DB, or fallback to full compound analysis if not present
+                target_core = raw_reduced_core or ""
+                
+                # We need embeddings for these cores. 
+                # Calculating on the fly is acceptable for small result sets.
+                if not target_core:
+                    # Fallback or skip
+                    scored.append((image_id, 0.0))
+                    continue
+                
+                cand_embedding = self.chemberta_service.smiles_to_embedding(target_core)
+                cand_vec = np.array(cand_embedding).astype("float32")
+                c_norm = np.linalg.norm(cand_vec)
+                if c_norm > 0:
+                    cand_vec /= c_norm
+                
+                distance = np.linalg.norm(query_vec - cand_vec)
+                similarity = self._distance_to_similarity(float(distance))
+                scored.append((image_id, similarity))
+            
+            scored.sort(key=lambda x: x[1], reverse=True)
+            top_ids = [x[0] for x in scored[:k]]
+            id_similarity_map = {x[0]: x[1] for x in scored[:k]}
+
+        # 3. Hydrate results
+        hydrated_rows = self.compound_repository.get_search_rows(session, top_ids)
+        row_by_id = {row[0].id: row for row in hydrated_rows}
+
+        results: list[SearchResultItem] = []
+        for image_id in top_ids:
+            row = row_by_id.get(image_id)
+            if row is None:
+                continue
+            compound_row, patent_row = row
+            image_path = Path(compound_row.image_path)
+            relative_image = image_path.relative_to(self.settings.upload_dir.resolve())
+            image_url = f"/static/{relative_image.as_posix()}"
+            results.append(
+                SearchResultItem(
+                    image_id=image_id,
+                    similarity=id_similarity_map.get(image_id, 0.0),
+                    smiles=compound_row.canonical_smiles or compound_row.smiles,
+                    image_url=image_url,
+                    patent_code=patent_row.patent_slug,
+                    page_number=compound_row.page_number,
+                    patent_source_url=patent_row.source_url,
+                )
+            )
+
+        if progress_callback:
+            progress_callback("info", f"Finished structure search with {len(results)} results.")
+
+        return SearchResponse(query_smiles=core_smiles or "Core-agnostic (R-group filtered)", results=results)

@@ -14,7 +14,7 @@
 This workspace already has a conda Python with the large scientific stack installed. The local backend virtualenv `v2/backend/.venv_sys` uses `--system-site-packages` so it can reuse those packages while still isolating the backend-specific additions such as:
 
 - `sqlmodel`
-- `pydantic-settings`
+- `pydantic-settings``
 - `MolScribe`
 - backend test/runtime helpers
 

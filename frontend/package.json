@@ -6,17 +6,29 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "vendor:ketcher": "node ./scripts/vendor_ketcher_esm.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
+    "acorn": "^8.16.0",
+    "immutable": "^4.3.5",
+    "ketcher-core": "^3.5.0",
+    "ketcher-react": "^3.5.0",
+    "ketcher-standalone": "^3.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^25.0.1",
     "typescript": "^5.5.4",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^2.1.9"
   }
 }

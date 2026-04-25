@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.models import CompoundImage, CompoundRGroup, JobLog, JobRun, Patent  # noqa: F401
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import get_settings

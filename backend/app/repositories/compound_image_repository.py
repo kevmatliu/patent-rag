@@ -8,11 +8,15 @@ from sqlalchemy import func
 from sqlmodel import Session, asc, desc, select
 
 from app.models.compound_image import CompoundImage
-from app.models.enums import ProcessingStatus
+from app.models.enums import ProcessingStatus, ValidationStatus
 from app.models.patent import Patent
+from app.repositories.compound_r_group_repository import CompoundRGroupRepository
 
 
 class CompoundImageRepository:
+    def __init__(self) -> None:
+        self.r_group_repository = CompoundRGroupRepository()
+
     def create_many(
         self,
         session: Session,
@@ -69,6 +73,14 @@ class CompoundImageRepository:
         if compound_ids:
             statement = statement.where(CompoundImage.id.in_(list(compound_ids)))
         statement = statement.order_by(ordering).limit(limit)
+        return list(session.exec(statement).all())
+
+    def list_by_patent(self, session: Session, patent_id: int) -> list[CompoundImage]:
+        statement = (
+            select(CompoundImage)
+            .where(CompoundImage.patent_id == patent_id)
+            .order_by(asc(CompoundImage.created_at), asc(CompoundImage.id))
+        )
         return list(session.exec(statement).all())
 
     def mark_processing(self, session: Session, image: CompoundImage) -> CompoundImage:
@@ -129,25 +141,65 @@ class CompoundImageRepository:
         statement = select(CompoundImage).where(CompoundImage.embedding.is_not(None))
         return list(session.exec(statement).all())
 
+    def count_by_core_smiles(
+        self,
+        session: Session,
+        core_smiles_values: Sequence[str],
+    ) -> dict[str, int]:
+        normalized_values = sorted({value.strip() for value in core_smiles_values if value and value.strip()})
+        if not normalized_values:
+            return {}
+
+        rows: list[CompoundImage] = list(
+            session.exec(
+                select(CompoundImage).where(
+                    CompoundImage.core_smiles.in_(normalized_values)
+                    | CompoundImage.reduced_core.in_(normalized_values)
+                )
+            ).all()
+        )
+
+        counts: dict[str, int] = {value: 0 for value in normalized_values}
+        for row in rows:
+            resolved_core = (row.core_smiles or row.reduced_core or "").strip()
+            if resolved_core in counts:
+                counts[resolved_core] += 1
+        return counts
+
     def reset_for_reprocess(self, session: Session, *, compound_ids: Sequence[int]) -> int:
         ids = list(compound_ids)
         if not ids:
             return 0
         items = self.get_by_ids(session, ids)
+        self.r_group_repository.delete_by_compound_ids(session, ids)
         now = datetime.now(timezone.utc)
         for item in items:
             item.processing_status = ProcessingStatus.PENDING
             item.smiles = None
+            item.canonical_smiles = None
             item.embedding = None
             item.last_error = None
+            item.is_compound = None
+            item.validation_status = ValidationStatus.UNPROCESSED
+            item.validation_error = None
+            item.is_duplicate_within_patent = False
+            item.duplicate_of_compound_id = None
+            item.kept_for_series_analysis = False
+            item.murcko_scaffold_smiles = None
+            item.reduced_core = None
+            item.core_smiles = None
+            item.core_smarts = None
+            item.pipeline_version = None
             item.updated_at = now
             session.add(item)
         session.commit()
         return len(items)
 
     def delete_by_ids(self, session: Session, *, compound_ids: Sequence[int]) -> int:
-        items = self.get_by_ids(session, compound_ids)
+        ids = list(compound_ids)
+        items = self.get_by_ids(session, ids)
         count = len(items)
+        self.r_group_repository.delete_by_compound_ids(session, ids)
         for item in items:
             session.delete(item)
         session.commit()

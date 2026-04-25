@@ -13,7 +13,9 @@ from app.api.health import router as health_router
 from app.api.images import router as images_router
 from app.api.jobs import router as jobs_router
 from app.api.patents import router as patents_router
+from app.api.recommend import router as recommend_router
 from app.api.search import router as search_router
+from app.api.format import router as format_router
 from app.core.config import get_settings
 from app.core.dependencies import get_vector_index_service
 from app.core.logging import configure_logging, get_logger
@@ -75,6 +77,8 @@ def create_app() -> FastAPI:
     app.include_router(patents_router)
     app.include_router(images_router)
     app.include_router(search_router)
+    app.include_router(recommend_router)
+    app.include_router(format_router)
 
     @app.get("/")
     def root() -> dict[str, str]:

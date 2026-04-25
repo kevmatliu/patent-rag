@@ -68,6 +68,42 @@ export interface SearchResponse {
   results: SearchResultItem[];
 }
 
+export interface SimilarCoreRecommendationItem {
+  core_smiles: string;
+  apply_core_smiles: string;
+  score: number;
+  support_count: number;
+  reason: string;
+}
+
+export interface RGroupRecommendationItem {
+  rgroup_smiles: string;
+  count: number;
+  reason: string;
+}
+
+export interface ApplyModificationResponse {
+  smiles: string;
+  core_smiles: string;
+}
+
+export interface DecomposedStructureRGroupItem {
+  r_label: string;
+  r_group: string;
+}
+
+export interface DecomposeStructureResponse {
+  canonical_smiles: string;
+  reduced_core: string;
+  labeled_core_smiles: string;
+  attachment_points: string[];
+  r_groups: DecomposedStructureRGroupItem[];
+}
+
+export interface SmilesSvgResponse {
+  svg: string;
+}
+
 export interface CompoundBrowserItem {
   compound_id: number;
   patent_id: number;
@@ -77,10 +113,38 @@ export interface CompoundBrowserItem {
   page_number?: number | null;
   processing_status: string;
   smiles?: string | null;
+  canonical_smiles?: string | null;
+  validation_status?: string | null;
+  is_compound?: boolean | null;
+  is_duplicate_within_patent: boolean;
+  duplicate_of_compound_id?: number | null;
+  kept_for_series_analysis: boolean;
+  murcko_scaffold_smiles?: string | null;
+  reduced_core?: string | null;
+  core_smiles?: string | null;
+  core_smarts?: string | null;
+  validation_error?: string | null;
+  pipeline_version?: string | null;
   has_embedding: boolean;
   created_at: string;
   updated_at: string;
   last_error?: string | null;
+}
+
+export interface CompoundRGroupItem {
+  compound_id: number;
+  patent_id: number;
+  core_smiles?: string | null;
+  core_smarts?: string | null;
+  r_label: string;
+  r_group: string;
+  pipeline_version?: string | null;
+  created_at: string;
+}
+
+export interface CompoundRGroupResponse {
+  compound_id: number;
+  items: CompoundRGroupItem[];
 }
 
 export interface CompoundBrowserResponse {
@@ -212,12 +276,64 @@ export function searchBySmilesJob(smiles: string, k: number): Promise<JobAccepte
   return apiPostForm<JobAcceptedResponse>("/api/search/smiles-job", formData);
 }
 
+export function searchByStructureJob(payload: {
+  core_smiles?: string;
+  r_groups: Record<string, string>;
+  k?: number;
+}): Promise<JobAcceptedResponse> {
+  return apiPostJson<JobAcceptedResponse>("/api/search/structure-job", payload);
+}
+
+export function recommendSimilarCores(coreSmiles: string, k = 20): Promise<SimilarCoreRecommendationItem[]> {
+  return apiPostJson<SimilarCoreRecommendationItem[]>("/recommend/similar-cores", {
+    core_smiles: coreSmiles,
+    k
+  });
+}
+
+export function recommendRGroups(
+  coreSmiles: string,
+  attachmentPoint: string,
+  k = 20
+): Promise<RGroupRecommendationItem[]> {
+  return apiPostJson<RGroupRecommendationItem[]>("/recommend/rgroups", {
+    core_smiles: coreSmiles,
+    attachment_point: attachmentPoint,
+    k
+  });
+}
+
+export function applyModification(payload: {
+  current_smiles: string;
+  target_core_smiles?: string;
+  attachment_point?: string;
+  rgroup_smiles?: string;
+}): Promise<ApplyModificationResponse> {
+  return apiPostJson<ApplyModificationResponse>("/recommend/apply-modification", payload);
+}
+
+export function decomposeStructure(currentSmiles: string): Promise<DecomposeStructureResponse> {
+  return apiPostJson<DecomposeStructureResponse>("/recommend/decompose-structure", {
+    current_smiles: currentSmiles
+  });
+}
+
+export function renderSmilesSvg(smiles: string): Promise<SmilesSvgResponse> {
+  return apiPostJson<SmilesSvgResponse>("/api/format/smiles-to-svg", {
+    struct: smiles
+  });
+}
+
 export function deleteCompounds(compoundIds: number[]): Promise<CompoundSelectionResponse> {
   return apiPostJson<CompoundSelectionResponse>("/api/compounds/delete", { compound_ids: compoundIds });
 }
 
 export function reprocessCompounds(compoundIds: number[]): Promise<JobAcceptedResponse> {
   return apiPostJson<JobAcceptedResponse>("/api/compounds/reprocess", { compound_ids: compoundIds });
+}
+
+export function getCompoundRGroups(compoundId: number): Promise<CompoundRGroupResponse> {
+  return apiGet<CompoundRGroupResponse>(`/api/compounds/${compoundId}/r-groups`);
 }
 
 export async function deletePatent(patentCode: string): Promise<CompoundSelectionResponse> {

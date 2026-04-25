@@ -35,6 +35,10 @@ class Settings(BaseSettings):
         default=Path("./uploads/search_tmp"),
         alias="SEARCH_TMP_DIR",
     )
+    processing_pipeline_version: str = Field(
+        default="rdkit-enrichment-v1",
+        alias="PROCESSING_PIPELINE_VERSION",
+    )
     api_title: str = "Chemical Patent Search API"
     api_version: str = "2.0.0"
 

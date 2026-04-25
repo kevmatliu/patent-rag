@@ -13,6 +13,7 @@ from app.db.session import get_session
 from app.repositories.job_repository import JobRepository
 from app.schemas.job import JobAcceptedResponse
 from app.schemas.image_processing import SearchResponse
+from app.schemas.structure_search import StructureSearchRequest
 from app.services.search_service import SearchService
 
 
@@ -71,6 +72,37 @@ def _run_smiles_search_job(job_id: str, smiles: str, k: int, search_service: Sea
             job_repository.fail_job(session, job, error=str(exc))
 
 
+def _run_structure_search_job(
+    job_id: str,
+    core_smiles: Optional[str],
+    r_groups: dict[str, str],
+    k: int,
+    search_service: SearchService,
+) -> None:
+    with Session(engine) as session:
+        job = job_repository.get_job(session, job_id)
+        if job is None:
+            return
+
+        job_repository.start_job(session, job)
+
+        def log_progress(level: str, message: str) -> None:
+            job_repository.add_log(session, job_id=job_id, level=level, message=message)
+
+        try:
+            result = search_service.search_by_structure(
+                session,
+                core_smiles=core_smiles,
+                r_groups=r_groups,
+                k=k,
+                progress_callback=log_progress,
+            )
+            job_repository.complete_job(session, job, summary=result.model_dump())
+        except Exception as exc:
+            job_repository.add_log(session, job_id=job_id, level="error", message=f"Structure search failed: {exc}")
+            job_repository.fail_job(session, job, error=str(exc))
+
+
 @router.post("/image", response_model=SearchResponse)
 async def search_image(
     file: UploadFile = File(...),
@@ -126,4 +158,24 @@ def search_smiles_job(
     job = job_repository.create_job(session, job_type="smiles_search")
     job_repository.add_log(session, job_id=job.id, message="Received SMILES query.")
     background_tasks.add_task(_run_smiles_search_job, job.id, smiles, k, search_service)
+    return JobAcceptedResponse(job_id=job.id, status=job.status)
+
+
+@router.post("/structure-job", response_model=JobAcceptedResponse)
+def search_structure_job(
+    background_tasks: BackgroundTasks,
+    payload: StructureSearchRequest,
+    session: Session = Depends(get_session),
+    search_service: SearchService = Depends(get_search_service),
+) -> JobAcceptedResponse:
+    job = job_repository.create_job(session, job_type="structure_search")
+    job_repository.add_log(session, job_id=job.id, message="Received structure search query.")
+    background_tasks.add_task(
+        _run_structure_search_job,
+        job.id,
+        payload.core_smiles,
+        payload.r_groups,
+        payload.k,
+        search_service,
+    )
     return JobAcceptedResponse(job_id=job.id, status=job.status)

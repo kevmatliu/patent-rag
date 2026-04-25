@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
-from app.models.enums import ProcessingStatus
+from app.models.enums import ProcessingStatus, ValidationStatus
 
 
 class CompoundImage(SQLModel, table=True):
@@ -15,7 +15,19 @@ class CompoundImage(SQLModel, table=True):
     page_number: Optional[int] = Field(default=None, index=True)
     processing_status: ProcessingStatus = Field(default=ProcessingStatus.PENDING, index=True)
     smiles: Optional[str] = Field(default=None)
+    canonical_smiles: Optional[str] = Field(default=None)
     embedding: Optional[str] = Field(default=None)
+    is_compound: Optional[bool] = Field(default=None, index=True)
+    validation_status: ValidationStatus = Field(default=ValidationStatus.UNPROCESSED, index=True)
+    validation_error: Optional[str] = Field(default=None)
+    is_duplicate_within_patent: bool = Field(default=False, index=True)
+    duplicate_of_compound_id: Optional[int] = Field(default=None, index=True)
+    kept_for_series_analysis: bool = Field(default=False, index=True)
+    murcko_scaffold_smiles: Optional[str] = Field(default=None)
+    reduced_core: Optional[str] = Field(default=None)
+    core_smiles: Optional[str] = Field(default=None)
+    core_smarts: Optional[str] = Field(default=None)
+    pipeline_version: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_error: Optional[str] = Field(default=None)

@@ -66,6 +66,24 @@ class VectorIndexService:
             )
         return results
 
+    def get_vectors_by_ids(self, image_ids: list[int]) -> dict[int, list[float]]:
+        with self.lock:
+            if self.index is None:
+                return {}
+            
+            # FAISS IndexFlatL2 doesn't have a direct lookup by ID if we use an external id_map.
+            # We need to find the internal indices for the given image_ids.
+            id_to_internal = {image_id: i for i, image_id in enumerate(self.id_map)}
+            
+            results: dict[int, list[float]] = {}
+            for target_id in image_ids:
+                internal_idx = id_to_internal.get(target_id)
+                if internal_idx is not None:
+                    # reconstruct returns the vector at the specified internal index
+                    vector = self.index.reconstruct(internal_idx)
+                    results[target_id] = vector.tolist()
+            return results
+
     def save(self) -> None:
         if self.index is None:
             return

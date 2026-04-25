@@ -14,3 +14,11 @@ class ProcessingStatus(str, Enum):
     PROCESSING = "processing"
     PROCESSED = "processed"
     FAILED = "failed"
+
+
+class ValidationStatus(str, Enum):
+    UNPROCESSED = "unprocessed"
+    VALID = "valid"
+    PARSE_FAILED = "parse_failed"
+    SANITIZE_FAILED = "sanitize_failed"
+    STANDARDIZE_FAILED = "standardize_failed"

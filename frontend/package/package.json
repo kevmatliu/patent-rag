@@ -1,0 +1,99 @@
+{
+  "name": "ketcher-standalone",
+  "version": "3.5.0",
+  "description": "Web-based molecule sketcher",
+  "license": "Apache-2.0",
+  "homepage": "http://lifescience.opensource.epam.com/ketcher",
+  "author": {
+    "name": "EPAM Life Sciences",
+    "url": "http://lifescience.opensource.epam.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/epam/ketcher.git",
+    "directory": "packages/ketcher-standalone"
+  },
+  "keywords": [
+    "molecule",
+    "sketcher",
+    "chemistry"
+  ],
+  "bugs": {
+    "url": "https://github.com/epam/ketcher/issues"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.modern.js",
+  "types": "dist/index.d.ts",
+  "source": "src/index.ts",
+  "engines": {
+    "node": ">=14"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production rollup -c -m true && cross-env NODE_ENV=production INDIGO_MODULE_NAME=base64Cjs rollup -c -m true && cross-env NODE_ENV=production INDIGO_MODULE_NAME=wasm rollup -c -m true && cross-env NODE_ENV=production INDIGO_MODULE_NAME=base64WithoutRender SEPARATE_INDIGO_RENDER=true rollup -c -m true && cross-env NODE_ENV=production INDIGO_MODULE_NAME=base64WithoutRenderCjs SEPARATE_INDIGO_RENDER=true rollup -c -m true && cross-env NODE_ENV=production INDIGO_MODULE_NAME=wasmWithoutRender SEPARATE_INDIGO_RENDER=true rollup -c -m true",
+    "start": "cross-env NODE_ENV=development rollup -c -m true -w",
+    "test": "run-s test:prettier test:eslint:quiet test:types test:unit",
+    "test:eslint": "eslint . --ext .ts,.js",
+    "test:eslint:quiet": "npm run test:eslint -- --quiet",
+    "test:eslint:fix": "npm run test:eslint -- --fix",
+    "test:types": "tsc --noEmit",
+    "test:unit": "jest --passWithNoTests",
+    "test:prettier": "prettier --check \"./**/*.{js,ts,json}\"",
+    "prettier:write": "prettier --write \"./**/*.{js,ts,json}\""
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.26.10",
+    "indigo-ketcher": "1.33.0",
+    "ketcher-core": "*"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.17.9",
+    "@babel/plugin-transform-runtime": "^7.17.0",
+    "@babel/preset-env": "^7.16.11",
+    "@babel/preset-typescript": "^7.16.7",
+    "@rollup/plugin-alias": "^3.1.9",
+    "@rollup/plugin-babel": "^5.2.1",
+    "@rollup/plugin-commonjs": "^16.0.0",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^5.0.7",
+    "@rollup/plugin-strip": "^2.0.0",
+    "@surma/rollup-plugin-off-main-thread": "^2.2.3",
+    "@types/jest": "^27.0.3",
+    "@types/node": "^16.11.12",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.44.0",
+    "eslint-plugin-jest": "^25.3.0",
+    "jest": "26.6.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^2.5.1",
+    "rollup": "^2.79.2",
+    "rollup-plugin-cleanup": "^3.2.1",
+    "rollup-plugin-copy": "^3.4.0",
+    "rollup-plugin-delete": "^2.0.0",
+    "rollup-plugin-node-polyfills": "^0.2.1",
+    "rollup-plugin-typescript2": "^0.31.1",
+    "rollup-plugin-visualizer": "^5.5.2",
+    "rollup-plugin-web-worker-loader": "^1.6.1",
+    "typescript": "^4.5.2"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/main.js",
+      "require": "./dist/cjs/main.js"
+    },
+    "./dist/binaryWasm": {
+      "import": "./dist/binaryWasm/main.js",
+      "require": "./dist/binaryWasm/main.js"
+    },
+    "./dist/jsNoRender": {
+      "import": "./dist/jsNoRender/main.js",
+      "require": "./dist/cjs/jsNoRender/main.js"
+    },
+    "./dist/binaryWasmNoRender": {
+      "import": "./dist/binaryWasmNoRender/main.js",
+      "require": "./dist/binaryWasmNoRender/main.js"
+    }
+  }
+}

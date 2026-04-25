@@ -13,11 +13,14 @@ from app.core.dependencies import get_processing_service, get_vector_index_servi
 from app.db.session import get_session
 from app.models.compound_image import CompoundImage
 from app.repositories.compound_image_repository import CompoundImageRepository
+from app.repositories.compound_r_group_repository import CompoundRGroupRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.patent_repository import PatentRepository
 from app.schemas.compound_browser import (
     CompoundBrowserItem,
     CompoundBrowserResponse,
+    CompoundRGroupItem,
+    CompoundRGroupResponse,
     CompoundSelectionRequest,
     CompoundSelectionResponse,
 )
@@ -29,6 +32,7 @@ from app.services.processing_service import ProcessingService
 router = APIRouter(prefix="/api/compounds", tags=["compounds"])
 
 compound_repository = CompoundImageRepository()
+r_group_repository = CompoundRGroupRepository()
 patent_repository = PatentRepository()
 job_repository = JobRepository()
 
@@ -63,6 +67,18 @@ def browse_compounds(
                 page_number=compound_row.page_number,
                 processing_status=compound_row.processing_status.value,
                 smiles=compound_row.smiles,
+                canonical_smiles=compound_row.canonical_smiles,
+                validation_status=compound_row.validation_status.value,
+                is_compound=compound_row.is_compound,
+                is_duplicate_within_patent=compound_row.is_duplicate_within_patent,
+                duplicate_of_compound_id=compound_row.duplicate_of_compound_id,
+                kept_for_series_analysis=compound_row.kept_for_series_analysis,
+                murcko_scaffold_smiles=compound_row.murcko_scaffold_smiles,
+                reduced_core=compound_row.reduced_core,
+                core_smiles=compound_row.core_smiles,
+                core_smarts=compound_row.core_smarts,
+                validation_error=compound_row.validation_error,
+                pipeline_version=compound_row.pipeline_version,
                 has_embedding=compound_row.embedding is not None,
                 created_at=compound_row.created_at.isoformat(),
                 updated_at=compound_row.updated_at.isoformat(),
@@ -71,6 +87,34 @@ def browse_compounds(
         )
 
     return CompoundBrowserResponse(items=items, total=total, offset=offset, limit=limit)
+
+
+@router.get("/{compound_id}/r-groups", response_model=CompoundRGroupResponse)
+def get_compound_r_groups(
+    compound_id: int,
+    session: Session = Depends(get_session),
+) -> CompoundRGroupResponse:
+    compound = session.get(CompoundImage, compound_id)
+    if compound is None:
+        raise HTTPException(status_code=404, detail="Compound not found")
+
+    rows = r_group_repository.list_by_compound_id(session, compound_id)
+    return CompoundRGroupResponse(
+        compound_id=compound_id,
+        items=[
+            CompoundRGroupItem(
+                compound_id=row.compound_id,
+                patent_id=row.patent_id,
+                core_smiles=row.core_smiles,
+                core_smarts=row.core_smarts,
+                r_label=row.r_label,
+                r_group=row.r_group,
+                pipeline_version=row.pipeline_version,
+                created_at=row.created_at.isoformat(),
+            )
+            for row in rows
+        ],
+    )
 
 
 def _rebuild_index(session: Session) -> None:

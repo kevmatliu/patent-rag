@@ -9,8 +9,10 @@ const pages: Array<{ key: PageKey; label: string }> = [
   { key: "batch", label: "Batch Upload" },
   { key: "patents", label: "Patents" },
   { key: "compounds", label: "Compounds" },
+  { key: "exploration", label: "Exploration" },
   { key: "processing", label: "Processing" },
-  { key: "search", label: "Search" }
+  { key: "search", label: "Search" },
+  { key: "workbench", label: "Workbench" }
 ];
 
 export function Nav({ activePage, onNavigate }: NavProps) {

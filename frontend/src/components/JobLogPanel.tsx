@@ -1,5 +1,3 @@
-import { useEffect, useRef } from "react";
-
 import type { JobLogItem } from "../api/patents";
 
 interface JobLogPanelProps {
@@ -9,12 +7,6 @@ interface JobLogPanelProps {
 }
 
 export function JobLogPanel({ title, status, logs }: JobLogPanelProps) {
-  const endRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [logs]);
-
   return (
     <section className="panel">
       <div className="job-log-header">
@@ -31,7 +23,6 @@ export function JobLogPanel({ title, status, logs }: JobLogPanelProps) {
               <div>{log.message}</div>
             </article>
           ))}
-          <div ref={endRef} />
         </div>
       )}
     </section>

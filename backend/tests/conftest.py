@@ -8,15 +8,19 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.api import images as images_api
 from app.api import patents as patents_api
+from app.api import recommend as recommend_api
 from app.api import search as search_api
 from app.core.config import get_settings
 from app.core.dependencies import (
     get_chemberta_service,
+    get_core_recommendation_service,
     get_extraction_service,
     get_health_service,
+    get_molecule_modification_service,
     get_molscribe_service,
     get_patent_fetch_service,
     get_processing_service,
+    get_rgroup_recommendation_service,
     get_search_service,
     get_smiles_recognition_service,
     get_vector_index_service,
@@ -46,6 +50,9 @@ def configured_settings(tmp_path: Path):
         get_vector_index_service,
         get_processing_service,
         get_search_service,
+        get_core_recommendation_service,
+        get_rgroup_recommendation_service,
+        get_molecule_modification_service,
         get_health_service,
     ):
         cache.cache_clear()
@@ -63,6 +70,7 @@ def session_factory(configured_settings):
     patents_api.engine = engine
     images_api.engine = engine
     search_api.engine = engine
+    recommend_api.engine = engine
     return engine
 
 
