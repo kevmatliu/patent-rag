@@ -41,4 +41,6 @@ class SearchResultItem(BaseModel):
 
 class SearchResponse(BaseModel):
     query_smiles: str
+    query_x: Optional[float] = None
+    query_y: Optional[float] = None
     results: list[SearchResultItem]

@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
-import { deletePatent, getPatentMetadata, type PatentMetadataItem, type PatentMetadataSummary } from "../api/patents";
+import { useEffect, useMemo, useState } from "react";
+import {
+  deletePatent,
+  getPatentMetadata,
+  reprocessPatents,
+  type PatentMetadataItem,
+  type PatentMetadataSummary
+} from "../api/patents";
 
 const PAGE_SIZE = 25;
 
@@ -20,6 +26,7 @@ export function PatentBrowserPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedPatentIds, setSelectedPatentIds] = useState<number[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,14 +61,46 @@ export function PatentBrowserPage() {
 
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const allVisibleSelected = useMemo(
+    () => items.length > 0 && items.every((item) => selectedPatentIds.includes(item.patent_id)),
+    [items, selectedPatentIds]
+  );
 
   const refresh = () => {
     setReloadKey((current) => current + 1);
+    setSelectedPatentIds([]);
   };
 
   const applyFilter = () => {
     setAppliedFilter(filter.trim());
     setOffset(0);
+    setSelectedPatentIds([]);
+  };
+
+  const toggleSelection = (patentId: number) => {
+    setSelectedPatentIds((current) =>
+      current.includes(patentId) ? current.filter((id) => id !== patentId) : [...current, patentId]
+    );
+  };
+
+  const handleReprocessSelected = async () => {
+    if (selectedPatentIds.length === 0) {
+      return;
+    }
+    if (
+      !window.confirm(
+        `Reprocess ${selectedPatentIds.length} selected patent(s)? Existing embeddings and derived compound fields will be replaced.`
+      )
+    ) {
+      return;
+    }
+    try {
+      const response = await reprocessPatents(selectedPatentIds);
+      setMessage(`Queued selected patents for reprocessing. Job ${response.job_id}.`);
+      refresh();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Failed to reprocess patents");
+    }
   };
 
   const handleDeletePatent = async (patentCode: string) => {
@@ -88,6 +127,14 @@ export function PatentBrowserPage() {
           <div className="browser-actions">
             <button className="primary-button" type="button" onClick={refresh} disabled={loading}>
               Refresh
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={handleReprocessSelected}
+              disabled={selectedPatentIds.length === 0}
+            >
+              Reprocess selected
             </button>
           </div>
         </div>
@@ -151,6 +198,15 @@ export function PatentBrowserPage() {
             <table className="compound-table patent-table">
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={() =>
+                        setSelectedPatentIds(allVisibleSelected ? [] : items.map((item) => item.patent_id))
+                      }
+                    />
+                  </th>
                   <th>Patent ID</th>
                   <th>Patent Code</th>
                   <th>Extraction</th>
@@ -166,6 +222,13 @@ export function PatentBrowserPage() {
               <tbody>
                 {items.map((item) => (
                   <tr key={item.patent_id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedPatentIds.includes(item.patent_id)}
+                        onChange={() => toggleSelection(item.patent_id)}
+                      />
+                    </td>
                     <td>{item.patent_id}</td>
                     <td>{item.patent_code}</td>
                     <td>

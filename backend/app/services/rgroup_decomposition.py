@@ -22,6 +22,14 @@ class RGroupRow:
     core_smarts: str
     r_label: str
     r_group: str
+    attachment_index: Optional[int]
+
+
+def _attachment_index_from_label(label: str) -> Optional[int]:
+    if not label.startswith("R"):
+        return None
+    suffix = label[1:]
+    return int(suffix) if suffix.isdigit() else None
 
 
 @dataclass(frozen=True)
@@ -89,6 +97,7 @@ def decompose_r_groups(
                     core_smarts=labeled_core_smarts,
                     r_label=label,
                     r_group=Chem.MolToSmiles(fragment, canonical=True),
+                    attachment_index=_attachment_index_from_label(label),
                 )
             )
 

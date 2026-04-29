@@ -15,6 +15,9 @@ from app.schemas.recommend import (
     DecomposeStructureRequest,
     DecomposeStructureResponse,
     DecomposedStructureRGroupItem,
+    ExactCoreRGroupRecommendationColumn,
+    ExactCoreRGroupRecommendationRequest,
+    ExactCoreRGroupRecommendationResponse,
     RGroupRecommendationItem,
     RGroupRecommendationRequest,
     SimilarCoreRecommendationItem,
@@ -46,9 +49,46 @@ def recommend_similar_cores(
             score=item.score,
             support_count=item.support_count,
             reason=item.reason,
+            compound_ids=item.compound_ids or [],
+            exact_match=item.exact_match,
         )
         for item in results
     ]
+
+
+@router.post("/exact-core-rgroups", response_model=ExactCoreRGroupRecommendationResponse)
+def recommend_exact_core_rgroups(
+    payload: ExactCoreRGroupRecommendationRequest,
+    session: Session = Depends(get_session),
+    recommendation_service: RGroupRecommendationService = Depends(get_rgroup_recommendation_service),
+) -> ExactCoreRGroupRecommendationResponse:
+    result = recommendation_service.get_exact_core_rgroup_recommendations(
+        session,
+        query_smiles=payload.query_smiles,
+        attachment_points=payload.attachment_points,
+        k=payload.k,
+    )
+    return ExactCoreRGroupRecommendationResponse(
+        query_core_smiles=result.query_core_smiles,
+        attachment_points=result.attachment_points,
+        exact_core_found=result.exact_core_found,
+        columns=[
+            ExactCoreRGroupRecommendationColumn(
+                attachment_point=column.attachment_point,
+                items=[
+                    RGroupRecommendationItem(
+                        rgroup_smiles=item.rgroup_smiles,
+                        count=item.count,
+                        reason=item.reason,
+                        compound_ids=item.compound_ids,
+                        exact_match=item.exact_match,
+                    )
+                    for item in column.items
+                ],
+            )
+            for column in result.columns
+        ],
+    )
 
 
 @router.post("/rgroups", response_model=list[RGroupRecommendationItem])
@@ -68,6 +108,8 @@ def recommend_rgroups(
             rgroup_smiles=item.rgroup_smiles,
             count=item.count,
             reason=item.reason,
+            compound_ids=item.compound_ids,
+            exact_match=item.exact_match,
         )
         for item in results
     ]

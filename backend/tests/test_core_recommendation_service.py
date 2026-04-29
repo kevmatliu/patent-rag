@@ -29,12 +29,12 @@ def test_get_similar_cores_uses_stable_representative_labeled_core_per_series():
             ]
         ),
     )
-    service.compound_repository = SimpleNamespace(
-        get_by_ids=lambda session, ids: [
-            SimpleNamespace(id=1, reduced_core="c1ccccc1", core_smiles="c1ccc([*:2])cc1"),
-            SimpleNamespace(id=2, reduced_core="c1ccccc1", core_smiles="c1ccc([*:1])cc1"),
-            SimpleNamespace(id=3, reduced_core="c1ccccc1", core_smiles="c1ccc([*:1])cc1"),
-        ]
+    service.core_candidate_repository = SimpleNamespace(
+        get_preferred_by_compound_ids=lambda session, ids: {
+            1: SimpleNamespace(compound_id=1, reduced_core="c1ccccc1", core_smiles="c1ccc([*:2])cc1"),
+            2: SimpleNamespace(compound_id=2, reduced_core="c1ccccc1", core_smiles="c1ccc([*:1])cc1"),
+            3: SimpleNamespace(compound_id=3, reduced_core="c1ccccc1", core_smiles="c1ccc([*:1])cc1"),
+        }
     )
 
     results = service.get_similar_cores(session=None, core_smiles="CCO", k=5)

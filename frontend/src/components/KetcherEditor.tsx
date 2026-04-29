@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useMemo } from "react";
 import { Editor } from "ketcher-react";
 // @ts-ignore
 import { StandaloneStructServiceProvider } from "ketcher-standalone";
@@ -17,12 +17,11 @@ interface KetcherEditorProps {
   height?: number | string;
 }
 
-const structServiceProvider = new StandaloneStructServiceProvider();
-
 export const KetcherEditor = forwardRef<KetcherEditorHandle, KetcherEditorProps>(function KetcherEditor(
   { value, onSmilesChange, height = 600 },
   ref
 ) {
+  const structServiceProvider = useMemo(() => new StandaloneStructServiceProvider(), []);
   const [ketcherInstance, setKetcherInstance] = useState<any>(null);
   const lastAppliedSmilesRef = useRef("");
   const isMountedRef = useRef(true);
@@ -111,6 +110,48 @@ export const KetcherEditor = forwardRef<KetcherEditorHandle, KetcherEditorProps>
       }
     })();
   }, [value, ketcherInstance]);
+
+  useEffect(() => {
+    if (!ketcherInstance || !onSmilesChange) {
+      return;
+    }
+
+    const changeEmitter =
+      typeof ketcherInstance.subscribe === "function"
+        ? ketcherInstance
+        : typeof ketcherInstance.editor?.subscribe === "function"
+          ? ketcherInstance.editor
+          : null;
+
+    if (!changeEmitter) {
+      return;
+    }
+
+    let active = true;
+    const subscriber = changeEmitter.subscribe("change", async () => {
+      try {
+        const nextSmiles = ((await ketcherInstance.getSmiles()) ?? "").trim();
+        if (!active || nextSmiles === lastAppliedSmilesRef.current) {
+          return;
+        }
+        lastAppliedSmilesRef.current = nextSmiles;
+        onSmilesChange(nextSmiles);
+      } catch (error) {
+        if (active) {
+          console.error("Failed to read live Ketcher SMILES", error);
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+      try {
+        changeEmitter.unsubscribe("change", subscriber);
+      } catch (error) {
+        console.error("Failed to unsubscribe Ketcher change listener", error);
+      }
+    };
+  }, [ketcherInstance, onSmilesChange]);
 
   return (
     <div className="ketcher-frame-wrap" style={{ height, position: "relative" }}>

@@ -6,7 +6,7 @@ from collections import Counter
 from sqlmodel import Session
 
 from app.core.logging import get_logger
-from app.repositories.compound_image_repository import CompoundImageRepository
+from app.repositories.compound_core_candidate_repository import CompoundCoreCandidateRepository
 from app.services.scaffold_analysis import ScaffoldInput, analyze_scaffolds
 from app.services.smiles_validation import validate_and_standardize_smiles
 from app.services.chemberta_service import ChemBertaService
@@ -19,7 +19,10 @@ class SimilarCoreResult:
     score: float
     support_count: int
     apply_core_smiles: str = ""
-    reason: str = "embedding similarity"
+    reason: str = ""
+    # reason: str = "embedding similarity"
+    compound_ids: list[int] | None = None
+    exact_match: bool = False
 
 
 class CoreRecommendationService:
@@ -31,7 +34,7 @@ class CoreRecommendationService:
     ) -> None:
         self.chemberta_service = chemberta_service
         self.vector_index_service = vector_index_service
-        self.compound_repository = CompoundImageRepository()
+        self.core_candidate_repository = CompoundCoreCandidateRepository()
         self.logger = get_logger(__name__)
 
     @staticmethod
@@ -87,17 +90,19 @@ class CoreRecommendationService:
         )
 
         result_ids = [int(item["image_id"]) for item in raw_results]
-        compounds = self.compound_repository.get_by_ids(session, result_ids)
-        compound_by_id = {item.id: item for item in compounds if item.id is not None}
+        candidate_by_compound_id = self.core_candidate_repository.get_preferred_by_compound_ids(session, result_ids)
 
-        reduced_core_values = sorted({self._resolve_display_core(item) for item in compounds if self._resolve_display_core(item)})
+        candidates = list(candidate_by_compound_id.values())
+        reduced_core_values = sorted({self._resolve_display_core(item) for item in candidates if self._resolve_display_core(item)})
         support_counts = {value: 0 for value in reduced_core_values}
         representative_apply_cores: dict[str, str] = {}
         apply_core_variants: dict[str, Counter[str]] = {}
-        for item in compounds:
+        compound_ids_by_core: dict[str, set[int]] = {}
+        for item in candidates:
             resolved_display_core = self._resolve_display_core(item)
             if resolved_display_core in support_counts:
                 support_counts[resolved_display_core] += 1
+                compound_ids_by_core.setdefault(resolved_display_core, set()).add(int(item.compound_id))
                 apply_core = self._resolve_apply_core(item)
                 if apply_core:
                     apply_core_variants.setdefault(resolved_display_core, Counter())[apply_core] += 1
@@ -112,14 +117,14 @@ class CoreRecommendationService:
         seen_core_smiles: set[str] = set()
         for item in raw_results:
             image_id = int(item["image_id"])
-            compound = compound_by_id.get(image_id)
-            if compound is None:
+            candidate = candidate_by_compound_id.get(image_id)
+            if candidate is None:
                 continue
 
-            resolved_display_core = self._resolve_display_core(compound)
+            resolved_display_core = self._resolve_display_core(candidate)
             resolved_apply_core = representative_apply_cores.get(
                 resolved_display_core,
-                self._resolve_apply_core(compound),
+                self._resolve_apply_core(candidate),
             )
             if not resolved_display_core or resolved_display_core in seen_core_smiles:
                 continue
@@ -131,6 +136,8 @@ class CoreRecommendationService:
                     apply_core_smiles=resolved_apply_core,
                     score=self._distance_to_score(float(item["distance"])),
                     support_count=support_counts.get(resolved_display_core, 1),
+                    compound_ids=sorted(compound_ids_by_core.get(resolved_display_core, set())),
+                    exact_match=resolved_display_core == query_core_smiles,
                 )
             )
             if len(unique_results) >= k:

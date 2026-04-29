@@ -9,11 +9,13 @@ from sqlmodel import Session
 
 from app.core.config import Settings
 from app.core.logging import get_logger
+from app.models.compound_core_candidate import CompoundCoreCandidate
+from app.models.compound_core_candidate_r_group import CompoundCoreCandidateRGroup
 from app.models.compound_image import CompoundImage
-from app.models.compound_r_group import CompoundRGroup
 from app.models.enums import ProcessingStatus, ValidationStatus
 from app.repositories.compound_image_repository import CompoundImageRepository
-from app.repositories.compound_r_group_repository import CompoundRGroupRepository
+from app.repositories.compound_core_candidate_repository import CompoundCoreCandidateRepository
+from app.repositories.compound_core_candidate_r_group_repository import CompoundCoreCandidateRGroupRepository
 from app.services.chemberta_service import ChemBertaService
 from app.services.rgroup_decomposition import RGroupInput, decompose_r_groups
 from app.services.scaffold_analysis import ScaffoldInput, analyze_scaffolds
@@ -49,7 +51,8 @@ class ProcessingService:
         self.chemberta_service = chemberta_service
         self.vector_index_service = vector_index_service
         self.compound_repository = CompoundImageRepository()
-        self.r_group_repository = CompoundRGroupRepository()
+        self.core_candidate_repository = CompoundCoreCandidateRepository()
+        self.r_group_repository = CompoundCoreCandidateRGroupRepository()
         self.logger = get_logger(__name__)
         self.pipeline_version = settings.processing_pipeline_version
 
@@ -162,6 +165,7 @@ class ProcessingService:
             )
 
         self.r_group_repository.delete_by_patent(session, patent_id)
+        self.core_candidate_repository.delete_by_patent(session, patent_id)
 
         for image in patent_images:
             if image.id is None:
@@ -203,20 +207,14 @@ class ProcessingService:
         scaffold_assignments = analyze_scaffolds(
             [ScaffoldInput(compound_id=item.id, mol=mols_by_compound_id[item.id]) for item in kept_valid_images if item.id is not None]
         )
-        for image in kept_valid_images:
-            assert image.id is not None
-            assignment = scaffold_assignments[image.id]
-            image.murcko_scaffold_smiles = assignment.murcko_scaffold_smiles
-            image.reduced_core = assignment.reduced_core
-            image.core_smiles = None
-            image.core_smarts = None
-            image.updated_at = datetime.now(timezone.utc)
-
         reduced_core_series: dict[str, list[RGroupInput]] = {}
+        assignment_by_compound_id: dict[int, object] = {}
         for image in kept_valid_images:
             if image.id is None:
                 continue
-            reduced_core = image.reduced_core
+            assignment = scaffold_assignments[image.id]
+            assignment_by_compound_id[image.id] = assignment
+            reduced_core = assignment.reduced_core
             if not reduced_core:
                 continue
             series_inputs = reduced_core_series.setdefault(reduced_core, [])
@@ -228,35 +226,65 @@ class ProcessingService:
                 )
             )
 
-        core_smiles_by_compound: dict[int, str] = {}
-        core_smarts_by_compound: dict[int, str] = {}
-        r_group_rows: list[CompoundRGroup] = []
+        core_candidate_rows: list[CompoundCoreCandidate] = []
+        pending_r_group_rows: list[tuple[int, CompoundCoreCandidateRGroup]] = []
         for reduced_core, series_inputs in reduced_core_series.items():
             decomposition_result = decompose_r_groups(
                 core_smiles=reduced_core,
                 compounds=series_inputs,
             )
-            core_smiles_by_compound.update(decomposition_result.core_smiles_by_compound)
-            core_smarts_by_compound.update(decomposition_result.core_smarts_by_compound)
-            r_group_rows.extend(
-                CompoundRGroup(
-                    compound_id=row.compound_id,
-                    patent_id=row.patent_id,
-                    core_smiles=row.core_smiles,
-                    core_smarts=row.core_smarts,
-                    r_label=row.r_label,
-                    r_group=row.r_group,
-                    pipeline_version=self.pipeline_version,
+            matched_ids = set(decomposition_result.core_smiles_by_compound)
+            for series_input in series_inputs:
+                if series_input.compound_id not in matched_ids:
+                    continue
+                assignment = assignment_by_compound_id.get(series_input.compound_id)
+                if assignment is None:
+                    continue
+                core_candidate_rows.append(
+                    CompoundCoreCandidate(
+                        compound_id=series_input.compound_id,
+                        patent_id=series_input.patent_id,
+                        candidate_rank=1,
+                        is_selected=True,
+                        core_smiles=decomposition_result.core_smiles_by_compound.get(series_input.compound_id),
+                        core_smarts=decomposition_result.core_smarts_by_compound.get(series_input.compound_id),
+                        reduced_core=assignment.reduced_core,
+                        murcko_scaffold_smiles=assignment.murcko_scaffold_smiles,
+                        generation_method="rdkit_r_group_decomposition",
+                        pipeline_version=self.pipeline_version,
+                    )
                 )
-                for row in decomposition_result.r_groups
-            )
+            for row in decomposition_result.r_groups:
+                pending_r_group_rows.append(
+                    (
+                        row.compound_id,
+                        CompoundCoreCandidateRGroup(
+                            core_candidate_id=0,
+                            compound_id=row.compound_id,
+                            patent_id=row.patent_id,
+                            r_label=row.r_label,
+                            r_group_smiles=row.r_group,
+                            attachment_index=row.attachment_index,
+                            pipeline_version=self.pipeline_version,
+                        ),
+                    )
+                )
 
-        for image in kept_valid_images:
-            if image.id is None:
+        self.core_candidate_repository.create_many(session, core_candidate_rows)
+        session.flush()
+
+        candidate_by_compound_id = {
+            candidate.compound_id: candidate
+            for candidate in core_candidate_rows
+            if candidate.id is not None
+        }
+        r_group_rows: list[CompoundCoreCandidateRGroup] = []
+        for compound_id, row in pending_r_group_rows:
+            candidate = candidate_by_compound_id.get(compound_id)
+            if candidate is None or candidate.id is None:
                 continue
-            image.core_smiles = core_smiles_by_compound.get(image.id)
-            image.core_smarts = core_smarts_by_compound.get(image.id)
-            image.updated_at = datetime.now(timezone.utc)
+            row.core_candidate_id = candidate.id
+            r_group_rows.append(row)
 
         self.r_group_repository.create_many(session, r_group_rows)
 
@@ -326,10 +354,6 @@ class ProcessingService:
         image.is_duplicate_within_patent = False
         image.duplicate_of_compound_id = None
         image.kept_for_series_analysis = False
-        image.murcko_scaffold_smiles = None
-        image.reduced_core = None
-        image.core_smiles = None
-        image.core_smarts = None
         image.last_error = None
 
     def _apply_deduplication(
@@ -354,10 +378,6 @@ class ProcessingService:
                 image.is_duplicate_within_patent = True
                 image.duplicate_of_compound_id = duplicate_of_compound_id
                 image.kept_for_series_analysis = False
-                image.murcko_scaffold_smiles = None
-                image.reduced_core = None
-                image.core_smiles = None
-                image.core_smarts = None
                 image.embedding = None
                 image.updated_at = datetime.now(timezone.utc)
                 mols_by_compound_id.pop(image.id, None)

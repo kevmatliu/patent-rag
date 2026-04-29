@@ -61,7 +61,15 @@ function App() {
       <ErrorBoundary>
         {page === "batch" && <BatchUploadPage key="batch" />}
         {page === "compounds" && <CompoundBrowserPage key="compounds" />}
-        {page === "exploration" && <CompoundExplorationWorkspacePage key="exploration" />}
+        <div style={{ 
+          visibility: page === "exploration" ? "visible" : "hidden", 
+          position: page === "exploration" ? "relative" : "absolute",
+          height: page === "exploration" ? "100%" : "0",
+          width: page === "exploration" ? "100%" : "0",
+          overflow: "hidden" 
+        }}>
+          <CompoundExplorationWorkspacePage key="exploration" />
+        </div>
         {page === "patents" && <PatentBrowserPage key="patents" />}
         {page === "processing" && <ProcessingPage key="processing" />}
         {page === "search" && <SearchPage key="search" />}

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/search", tags=["search"])
 job_repository = JobRepository()
 
 
-def _run_search_job(job_id: str, file_path: str, k: int, search_service: SearchService) -> None:
+def _run_search_job(job_id: str, file_path: str, k: int, patent_codes: list[str], search_service: SearchService) -> None:
     with Session(engine) as session:
         job = job_repository.get_job(session, job_id)
         if job is None:
@@ -38,6 +38,7 @@ def _run_search_job(job_id: str, file_path: str, k: int, search_service: SearchS
                 session,
                 image_path=Path(file_path),
                 k=k,
+                patent_codes=patent_codes,
                 progress_callback=log_progress,
             )
             job_repository.complete_job(session, job, summary=result.model_dump())
@@ -48,7 +49,7 @@ def _run_search_job(job_id: str, file_path: str, k: int, search_service: SearchS
             Path(file_path).unlink(missing_ok=True)
 
 
-def _run_smiles_search_job(job_id: str, smiles: str, k: int, search_service: SearchService) -> None:
+def _run_smiles_search_job(job_id: str, smiles: str, k: int, patent_codes: list[str], search_service: SearchService) -> None:
     with Session(engine) as session:
         job = job_repository.get_job(session, job_id)
         if job is None:
@@ -64,6 +65,7 @@ def _run_smiles_search_job(job_id: str, smiles: str, k: int, search_service: Sea
                 session,
                 smiles=smiles,
                 k=k,
+                patent_codes=patent_codes,
                 progress_callback=log_progress,
             )
             job_repository.complete_job(session, job, summary=result.model_dump())
@@ -107,10 +109,11 @@ def _run_structure_search_job(
 async def search_image(
     file: UploadFile = File(...),
     k: int = Form(default=5),
+    patent_codes: list[str] = Form(default=[]),
     session: Session = Depends(get_session),
     search_service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
-    return await search_service.search_by_image(session, upload=file, k=k)
+    return await search_service.search_by_image(session, upload=file, k=k, patent_codes=patent_codes)
 
 
 @router.post("/image-job", response_model=JobAcceptedResponse)
@@ -118,6 +121,7 @@ async def search_image_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     k: int = Form(default=5),
+    patent_codes: list[str] = Form(default=[]),
     session: Session = Depends(get_session),
     search_service: SearchService = Depends(get_search_service),
 ) -> JobAcceptedResponse:
@@ -133,7 +137,7 @@ async def search_image_job(
 
     job = job_repository.create_job(session, job_type="image_search")
     job_repository.add_log(session, job_id=job.id, message=f"Saved query image as {temp_path.name}.")
-    background_tasks.add_task(_run_search_job, job.id, str(temp_path), k, search_service)
+    background_tasks.add_task(_run_search_job, job.id, str(temp_path), k, patent_codes, search_service)
     return JobAcceptedResponse(job_id=job.id, status=job.status)
 
 
@@ -141,10 +145,11 @@ async def search_image_job(
 def search_smiles(
     smiles: str = Form(...),
     k: int = Form(default=5),
+    patent_codes: list[str] = Form(default=[]),
     session: Session = Depends(get_session),
     search_service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
-    return search_service.search_by_smiles(session, smiles=smiles, k=k)
+    return search_service.search_by_smiles(session, smiles=smiles, k=k, patent_codes=patent_codes)
 
 
 @router.post("/smiles-job", response_model=JobAcceptedResponse)
@@ -152,12 +157,13 @@ def search_smiles_job(
     background_tasks: BackgroundTasks,
     smiles: str = Form(...),
     k: int = Form(default=5),
+    patent_codes: list[str] = Form(default=[]),
     session: Session = Depends(get_session),
     search_service: SearchService = Depends(get_search_service),
 ) -> JobAcceptedResponse:
     job = job_repository.create_job(session, job_type="smiles_search")
     job_repository.add_log(session, job_id=job.id, message="Received SMILES query.")
-    background_tasks.add_task(_run_smiles_search_job, job.id, smiles, k, search_service)
+    background_tasks.add_task(_run_smiles_search_job, job.id, smiles, k, patent_codes, search_service)
     return JobAcceptedResponse(job_id=job.id, status=job.status)
 
 

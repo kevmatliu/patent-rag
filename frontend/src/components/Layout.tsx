@@ -46,7 +46,7 @@ export function Layout({ activePage, onNavigate, title, children }: LayoutProps)
           <div className="header-top">
             <div>
               <h1>{title}</h1>
-              <p>Local-first patent image extraction, SMILES processing, and FAISS similarity search.</p>
+              {/* <p>Local-first patent image extraction, SMILES processing, and FAISS similarity search.</p> */}
             </div>
             <button className="danger-button" type="button" onClick={handleResetDatabase} disabled={resetting}>
               {resetting ? "Resetting..." : "Reset Database"}

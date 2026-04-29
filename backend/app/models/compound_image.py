@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.enums import ProcessingStatus, ValidationStatus
 
@@ -23,11 +21,8 @@ class CompoundImage(SQLModel, table=True):
     is_duplicate_within_patent: bool = Field(default=False, index=True)
     duplicate_of_compound_id: Optional[int] = Field(default=None, index=True)
     kept_for_series_analysis: bool = Field(default=False, index=True)
-    murcko_scaffold_smiles: Optional[str] = Field(default=None)
-    reduced_core: Optional[str] = Field(default=None)
-    core_smiles: Optional[str] = Field(default=None)
-    core_smarts: Optional[str] = Field(default=None)
     pipeline_version: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_error: Optional[str] = Field(default=None)
+    core_candidates: list["CompoundCoreCandidate"] = Relationship(back_populates="compound")

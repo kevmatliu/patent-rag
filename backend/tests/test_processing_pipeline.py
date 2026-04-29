@@ -5,8 +5,9 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
+from app.models.compound_core_candidate import CompoundCoreCandidate
+from app.models.compound_core_candidate_r_group import CompoundCoreCandidateRGroup
 from app.models.compound_image import CompoundImage
-from app.models.compound_r_group import CompoundRGroup
 from app.models.enums import ProcessingStatus, ValidationStatus
 from app.models.patent import Patent
 from app.services.processing_service import ProcessingService
@@ -91,7 +92,21 @@ def test_processing_service_runs_full_rdkit_enrichment_pipeline(session_factory,
     with Session(session_factory) as session:
         compounds = list(session.exec(select(CompoundImage).order_by(CompoundImage.id)).all())
         compound_by_name = {Path(item.image_path).name: item for item in compounds}
-        r_groups = list(session.exec(select(CompoundRGroup).order_by(CompoundRGroup.compound_id, CompoundRGroup.r_label)).all())
+        core_candidates = list(
+            session.exec(
+                select(CompoundCoreCandidate).order_by(CompoundCoreCandidate.compound_id, CompoundCoreCandidate.id)
+            ).all()
+        )
+        r_groups = list(
+            session.exec(
+                select(CompoundCoreCandidateRGroup).order_by(
+                    CompoundCoreCandidateRGroup.compound_id,
+                    CompoundCoreCandidateRGroup.attachment_index,
+                    CompoundCoreCandidateRGroup.r_label,
+                )
+            ).all()
+        )
+        candidate_by_compound_id = {item.compound_id: item for item in core_candidates}
 
     benzene_names = {"benzene-cl.png", "benzene-oc.png", "benzene-f.png"}
     cyclohexyl_names = {"cyclohexyl-cl.png", "cyclohexyl-br.png"}
@@ -109,7 +124,7 @@ def test_processing_service_runs_full_rdkit_enrichment_pipeline(session_factory,
     assert first_image.canonical_smiles == "Clc1ccccc1"
     assert first_image.is_duplicate_within_patent is False
     assert first_image.kept_for_series_analysis is True
-    assert first_image.core_smarts is not None
+    assert candidate_by_compound_id[first_image.id].core_smarts is not None
 
     assert duplicate_image.validation_status == ValidationStatus.VALID
     assert duplicate_image.canonical_smiles == first_image.canonical_smiles
@@ -126,33 +141,33 @@ def test_processing_service_runs_full_rdkit_enrichment_pipeline(session_factory,
 
     for name in benzene_names:
         item = compound_by_name[name]
-        assert item.murcko_scaffold_smiles == "c1ccccc1"
-        assert item.reduced_core == "c1ccccc1"
-        assert item.core_smiles is not None
-        assert item.core_smarts is not None
+        candidate = candidate_by_compound_id[item.id]
+        assert candidate.murcko_scaffold_smiles == "c1ccccc1"
+        assert candidate.reduced_core == "c1ccccc1"
+        assert candidate.core_smiles is not None
+        assert candidate.core_smarts is not None
         assert item.embedding is not None
 
     for name in cyclohexyl_names:
         item = compound_by_name[name]
-        assert item.murcko_scaffold_smiles == "C1CCCCC1"
-        assert item.reduced_core == "C1CCCCC1"
-        assert item.core_smiles is not None
-        assert item.core_smarts is not None
+        candidate = candidate_by_compound_id[item.id]
+        assert candidate.murcko_scaffold_smiles == "C1CCCCC1"
+        assert candidate.reduced_core == "C1CCCCC1"
+        assert candidate.core_smiles is not None
+        assert candidate.core_smarts is not None
         assert item.embedding is not None
 
     for name in reduced_benzene_names:
         item = compound_by_name[name]
-        assert item.murcko_scaffold_smiles == "c1ccc(CCc2ccccc2)cc1"
-        assert item.reduced_core == "c1ccccc1"
-        assert item.core_smiles is not None
-        assert item.core_smarts is not None
+        candidate = candidate_by_compound_id[item.id]
+        assert candidate.murcko_scaffold_smiles == "c1ccc(CCc2ccccc2)cc1"
+        assert candidate.reduced_core == "c1ccccc1"
+        assert candidate.core_smiles is not None
+        assert candidate.core_smarts is not None
         assert item.embedding is not None
 
     other_item = compound_by_name[other_name]
-    assert other_item.murcko_scaffold_smiles is None
-    assert other_item.reduced_core is None
-    assert other_item.core_smiles is None
-    assert other_item.core_smarts is None
+    assert other_item.id not in candidate_by_compound_id
     assert other_item.embedding is not None
 
     benzene_ids = {compound_by_name[name].id for name in benzene_names}
@@ -160,9 +175,8 @@ def test_processing_service_runs_full_rdkit_enrichment_pipeline(session_factory,
     reduced_benzene_ids = {compound_by_name[name].id for name in reduced_benzene_names}
     assert {row.compound_id for row in r_groups} == benzene_ids | cyclohexyl_ids | reduced_benzene_ids
     assert {row.r_label for row in r_groups} == {"R1"}
-    assert all(row.core_smiles for row in r_groups)
-    assert all(row.core_smarts for row in r_groups)
-    assert all(row.r_group for row in r_groups)
+    assert all(row.core_candidate_id for row in r_groups)
+    assert all(row.r_group_smiles for row in r_groups)
 
     assert set(chemberta.calls) == {
         "Clc1ccccc1",

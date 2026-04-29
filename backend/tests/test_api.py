@@ -14,8 +14,9 @@ from app.core.dependencies import (
     get_search_service,
 )
 from app.repositories.job_repository import JobRepository
+from app.models.compound_core_candidate import CompoundCoreCandidate
+from app.models.compound_core_candidate_r_group import CompoundCoreCandidateRGroup
 from app.models.compound_image import CompoundImage
-from app.models.compound_r_group import CompoundRGroup
 from app.models.enums import ExtractionStatus, ProcessingStatus
 from app.models.job_log import JobLog
 from app.models.job_run import JobRun
@@ -89,14 +90,22 @@ class SearchableFakeVectorIndexService(FakeVectorIndexService):
 
 
 class FakeSearchService:
-    def search_by_image_path(self, session: Session, *, image_path: Path, k: int, progress_callback=None) -> SearchResponse:
-        _ = (session, image_path, k)
+    def search_by_image_path(
+        self,
+        session: Session,
+        *,
+        image_path: Path,
+        k: int,
+        patent_codes=None,
+        progress_callback=None,
+    ) -> SearchResponse:
+        _ = (session, image_path, k, patent_codes)
         if progress_callback is not None:
             progress_callback("info", "Generated query SMILES.")
-        return self.search_by_smiles(session, smiles="CCO", k=k, progress_callback=progress_callback)
+        return self.search_by_smiles(session, smiles="CCO", k=k, patent_codes=patent_codes, progress_callback=progress_callback)
 
-    def search_by_smiles(self, session: Session, *, smiles: str, k: int, progress_callback=None) -> SearchResponse:
-        _ = (session, smiles, k)
+    def search_by_smiles(self, session: Session, *, smiles: str, k: int, patent_codes=None, progress_callback=None) -> SearchResponse:
+        _ = (session, smiles, k, patent_codes)
         if progress_callback is not None:
             progress_callback("info", "Generated ChemBERTa embedding for query.")
         return SearchResponse(
@@ -114,9 +123,9 @@ class FakeSearchService:
             ],
         )
 
-    async def search_by_image(self, session: Session, *, upload, k: int) -> SearchResponse:
-        _ = (session, upload, k)
-        return self.search_by_image_path(session, image_path=Path("query.png"), k=k)
+    async def search_by_image(self, session: Session, *, upload, k: int, patent_codes=None) -> SearchResponse:
+        _ = (session, upload, k, patent_codes)
+        return self.search_by_image_path(session, image_path=Path("query.png"), k=k, patent_codes=patent_codes)
 
 
 class FakeCoreRecommendationService:
@@ -128,6 +137,8 @@ class FakeCoreRecommendationService:
                 apply_core_smiles=f"{core_smiles}-apply-{index}",
                 score=round(0.95 - (index * 0.05), 6),
                 support_count=index + 1,
+                compound_ids=[],
+                exact_match=False,
             )
             for index in range(k)
         ]
@@ -148,6 +159,8 @@ class FakeRGroupRecommendationService:
                 rgroup_smiles=f"{core_smiles}-{attachment_point}-{index}",
                 count=index + 2,
                 reason=f"frequent at {attachment_point}",
+                compound_ids=[],
+                exact_match=True,
             )
             for index in range(k)
         ]
@@ -403,6 +416,8 @@ def test_recommend_similar_cores_returns_ranked_core_rows(client):
             "score": 0.95,
             "support_count": 1,
             "reason": "embedding similarity",
+            "compound_ids": [],
+            "exact_match": False,
         },
         {
             "core_smiles": "c1ccccc1-match-1",
@@ -410,6 +425,8 @@ def test_recommend_similar_cores_returns_ranked_core_rows(client):
             "score": 0.9,
             "support_count": 2,
             "reason": "embedding similarity",
+            "compound_ids": [],
+            "exact_match": False,
         },
     ]
 
@@ -428,11 +445,15 @@ def test_recommend_rgroups_returns_ranked_rows(client):
             "rgroup_smiles": "c1ccccc1-R1-0",
             "count": 2,
             "reason": "frequent at R1",
+            "compound_ids": [],
+            "exact_match": True,
         },
         {
             "rgroup_smiles": "c1ccccc1-R1-1",
             "count": 3,
             "reason": "frequent at R1",
+            "compound_ids": [],
+            "exact_match": True,
         },
     ]
 
@@ -473,8 +494,6 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
             canonical_smiles="Clc1ccccc1",
             validation_status="VALID",
             is_compound=True,
-            core_smiles="core-a",
-            reduced_core="core-a",
         )
         compound_b1 = CompoundImage(
             patent_id=patent.id,
@@ -483,8 +502,6 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
             canonical_smiles="Oc1ccccc1",
             validation_status="VALID",
             is_compound=True,
-            core_smiles="core-b",
-            reduced_core="core-b",
         )
         compound_b2 = CompoundImage(
             patent_id=patent.id,
@@ -493,8 +510,6 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
             canonical_smiles="Nc1ccccc1",
             validation_status="VALID",
             is_compound=True,
-            core_smiles="core-b",
-            reduced_core="core-b",
         )
         session.add_all([compound_a, compound_b1, compound_b2])
         session.commit()
@@ -507,29 +522,66 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
 
         session.add_all(
             [
-                CompoundRGroup(
+                CompoundCoreCandidate(
                     compound_id=compound_a_id,
                     patent_id=patent.id,
+                    candidate_rank=1,
+                    is_selected=True,
                     core_smiles="core-a",
                     core_smarts="*",
-                    r_label="R1",
-                    r_group="Cl[*:1]",
+                    reduced_core="core-a",
                 ),
-                CompoundRGroup(
+                CompoundCoreCandidate(
                     compound_id=compound_b1_id,
                     patent_id=patent.id,
+                    candidate_rank=1,
+                    is_selected=True,
                     core_smiles="core-b",
                     core_smarts="*",
-                    r_label="R1",
-                    r_group="O[*:1]",
+                    reduced_core="core-b",
                 ),
-                CompoundRGroup(
+                CompoundCoreCandidate(
                     compound_id=compound_b2_id,
                     patent_id=patent.id,
+                    candidate_rank=1,
+                    is_selected=True,
                     core_smiles="core-b",
                     core_smarts="*",
+                    reduced_core="core-b",
+                ),
+            ]
+        )
+        session.commit()
+
+        candidate_a = session.exec(select(CompoundCoreCandidate).where(CompoundCoreCandidate.compound_id == compound_a_id)).one()
+        candidate_b1 = session.exec(select(CompoundCoreCandidate).where(CompoundCoreCandidate.compound_id == compound_b1_id)).one()
+        candidate_b2 = session.exec(select(CompoundCoreCandidate).where(CompoundCoreCandidate.compound_id == compound_b2_id)).one()
+
+        session.add_all(
+            [
+                CompoundCoreCandidateRGroup(
+                    core_candidate_id=candidate_a.id,
+                    compound_id=compound_a_id,
+                    patent_id=patent.id,
                     r_label="R1",
-                    r_group="O[*:1]",
+                    r_group_smiles="Cl[*:1]",
+                    attachment_index=1,
+                ),
+                CompoundCoreCandidateRGroup(
+                    core_candidate_id=candidate_b1.id,
+                    compound_id=compound_b1_id,
+                    patent_id=patent.id,
+                    r_label="R1",
+                    r_group_smiles="O[*:1]",
+                    attachment_index=1,
+                ),
+                CompoundCoreCandidateRGroup(
+                    core_candidate_id=candidate_b2.id,
+                    compound_id=compound_b2_id,
+                    patent_id=patent.id,
+                    r_label="R1",
+                    r_group_smiles="O[*:1]",
+                    attachment_index=1,
                 ),
             ]
         )
@@ -561,6 +613,8 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
             "score": 1.0,
             "support_count": 1,
             "reason": "embedding similarity",
+            "compound_ids": [compound_a_id],
+            "exact_match": True,
         },
         {
             "core_smiles": "core-b",
@@ -568,6 +622,8 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
             "score": 0.833333,
             "support_count": 2,
             "reason": "embedding similarity",
+            "compound_ids": [compound_b1_id, compound_b2_id],
+            "exact_match": False,
         },
     ]
 
@@ -581,11 +637,15 @@ def test_recommendation_endpoints_use_real_ranking_and_fallback(client, session_
             "rgroup_smiles": "Cl[*:1]",
             "count": 1,
             "reason": "frequent at R1",
+            "compound_ids": [compound_a_id],
+            "exact_match": True,
         },
         {
             "rgroup_smiles": "O[*:1]",
             "count": 2,
             "reason": "frequent at R1 on similar core",
+            "compound_ids": [compound_b1_id, compound_b2_id],
+            "exact_match": False,
         },
     ]
 
@@ -628,13 +688,12 @@ def test_compound_browser_returns_paginated_rows(client, session_factory, config
     assert body["items"][0]["patent_code"] == "US20250042916A1"
     assert "page_number" in body["items"][0]
     assert "canonical_smiles" in body["items"][0]
-    assert "validation_status" in body["items"][0]
     assert "kept_for_series_analysis" in body["items"][0]
-    assert "murcko_scaffold_smiles" in body["items"][0]
-    assert "reduced_core" in body["items"][0]
+    assert "core_candidate_count" in body["items"][0]
+    assert "selected_core_candidate_id" in body["items"][0]
 
 
-def test_compound_r_groups_endpoint_returns_child_rows(client, session_factory):
+def test_compound_detail_and_core_candidate_r_groups_endpoints_return_child_rows(client, session_factory):
     with Session(session_factory) as session:
         patent = Patent(
             source_url="https://patents.google.com/patent/US20250042916A1/en",
@@ -651,34 +710,57 @@ def test_compound_r_groups_endpoint_returns_child_rows(client, session_factory):
             canonical_smiles="Clc1ccccc1",
             validation_status="VALID",
             is_compound=True,
-            core_smiles="c1ccc([*:1])cc1",
-            core_smarts="[#6]1:[#6]:[#6]([*:1]):[#6]:[#6]:[#6]:1",
         )
         session.add(image)
         session.commit()
         session.refresh(image)
         compound_id = image.id
 
+        candidate = CompoundCoreCandidate(
+            compound_id=compound_id,
+            patent_id=patent.id,
+            candidate_rank=1,
+            is_selected=True,
+            core_smiles="c1ccc([*:1])cc1",
+            core_smarts="[#6]1:[#6]:[#6]([*:1]):[#6]:[#6]:[#6]:1",
+            reduced_core="c1ccccc1",
+            murcko_scaffold_smiles="c1ccccc1",
+            generation_method="test",
+            pipeline_version="rdkit-enrichment-v1",
+        )
+        session.add(candidate)
+        session.commit()
+        session.refresh(candidate)
+        candidate_id = candidate.id
+
         session.add(
-            CompoundRGroup(
+            CompoundCoreCandidateRGroup(
+                core_candidate_id=candidate_id,
                 compound_id=compound_id,
                 patent_id=patent.id,
-                core_smiles="c1ccc([*:1])cc1",
-                core_smarts="[#6]1:[#6]:[#6]([*:1]):[#6]:[#6]:[#6]:1",
+                attachment_index=1,
                 r_label="R1",
-                r_group="Cl[*:1]",
+                r_group_smiles="Cl[*:1]",
                 pipeline_version="rdkit-enrichment-v1",
             )
         )
         session.commit()
 
-    response = client.get(f"/api/compounds/{compound_id}/r-groups")
+    detail_response = client.get(f"/api/compounds/{compound_id}")
+    assert detail_response.status_code == 200
+    detail_body = detail_response.json()
+    assert detail_body["compound"]["compound_id"] == compound_id
+    assert len(detail_body["core_candidates"]) == 1
+    assert detail_body["core_candidates"][0]["core_smiles"] == "c1ccc([*:1])cc1"
+
+    response = client.get(f"/api/compounds/core-candidates/{candidate_id}/r-groups")
     assert response.status_code == 200
     body = response.json()
     assert body["compound_id"] == compound_id
+    assert body["core_candidate_id"] == candidate_id
     assert len(body["items"]) == 1
     assert body["items"][0]["r_label"] == "R1"
-    assert body["items"][0]["r_group"] == "Cl[*:1]"
+    assert body["items"][0]["r_group_smiles"] == "Cl[*:1]"
 
 
 def test_compound_browser_filters_by_patent_code(client, session_factory, configured_settings):
@@ -711,6 +793,111 @@ def test_compound_browser_filters_by_patent_code(client, session_factory, config
     assert body["total"] == 1
     assert len(body["items"]) == 1
     assert body["items"][0]["patent_code"] == "WO2025015269A1"
+
+
+def test_compound_space_map_returns_projected_nodes_and_cluster_counts(client, session_factory, configured_settings):
+    image_path = configured_settings.upload_dir / "compound-map.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"png-image")
+
+    with Session(session_factory) as session:
+        patent_a = Patent(
+            source_url="https://patents.google.com/patent/US20250042916A1/en",
+            patent_slug="US20250042916A1",
+        )
+        patent_b = Patent(
+            source_url="https://patents.google.com/patent/WO2025015269A1/en",
+            patent_slug="WO2025015269A1",
+        )
+        session.add(patent_a)
+        session.add(patent_b)
+        session.commit()
+        session.refresh(patent_a)
+        session.refresh(patent_b)
+
+        session.add_all(
+            [
+                CompoundImage(
+                    patent_id=patent_a.id,
+                    image_path=str(image_path),
+                    canonical_smiles="CCO",
+                    embedding=json.dumps([1.0, 0.0, 0.0]),
+                ),
+                CompoundImage(
+                    patent_id=patent_a.id,
+                    image_path=str(image_path),
+                    canonical_smiles="CCN",
+                    embedding=json.dumps([0.9, 0.1, 0.0]),
+                ),
+                CompoundImage(
+                    patent_id=patent_b.id,
+                    image_path=str(image_path),
+                    canonical_smiles="c1ccccc1",
+                    embedding=json.dumps([0.0, 1.0, 0.0]),
+                ),
+                CompoundImage(
+                    patent_id=patent_b.id,
+                    image_path=str(image_path),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/compounds/map")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert len(body["nodes"]) == 3
+    assert all(0.0 <= item["x"] <= 1.0 for item in body["nodes"])
+    assert all(0.0 <= item["y"] <= 1.0 for item in body["nodes"])
+    assert all(item["has_embedding"] is True for item in body["nodes"])
+    assert {item["patent_code"] for item in body["nodes"]} == {"US20250042916A1", "WO2025015269A1"}
+    assert len(body["clusters"]) >= 1
+
+    patent_counts = {}
+    for cluster in body["clusters"]:
+        for patent_code, count in cluster["patent_counts"].items():
+            patent_counts[patent_code] = patent_counts.get(patent_code, 0) + count
+
+    assert patent_counts == {"US20250042916A1": 2, "WO2025015269A1": 1}
+
+
+def test_compound_space_map_is_deterministic(client, session_factory, configured_settings):
+    image_path = configured_settings.upload_dir / "compound-map-deterministic.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"png-image")
+
+    with Session(session_factory) as session:
+        patent = Patent(
+            source_url="https://patents.google.com/patent/US20250042916A1/en",
+            patent_slug="US20250042916A1",
+        )
+        session.add(patent)
+        session.commit()
+        session.refresh(patent)
+
+        for smiles, embedding in [
+            ("CCO", [1.0, 0.0, 0.0]),
+            ("CCN", [0.9, 0.1, 0.0]),
+            ("CCC", [0.8, 0.2, 0.0]),
+            ("c1ccccc1", [0.0, 1.0, 0.0]),
+        ]:
+            session.add(
+                CompoundImage(
+                    patent_id=patent.id,
+                    image_path=str(image_path),
+                    canonical_smiles=smiles,
+                    embedding=json.dumps(embedding),
+                )
+            )
+        session.commit()
+
+    first_response = client.get("/api/compounds/map")
+    second_response = client.get("/api/compounds/map")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json() == second_response.json()
 
 
 def test_patent_metadata_returns_summary_and_rows(client, session_factory):

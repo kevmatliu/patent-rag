@@ -1,4 +1,5 @@
-import { type PropsWithChildren, useEffect, useState } from "react";
+import { type PropsWithChildren, useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { renderSmilesSvg } from "../api/patents";
 
 const svgCache = new Map<string, string>();
@@ -7,8 +8,19 @@ interface SmilesHoverPreviewProps extends PropsWithChildren {
   smiles: string;
 }
 
-export function SmilesHoverPreview({ smiles, children }: SmilesHoverPreviewProps) {
-  const [open, setOpen] = useState(false);
+interface SmilesStructurePreviewProps {
+  smiles: string;
+  loadingText?: string;
+  errorText?: string;
+  testId?: string;
+}
+
+export function SmilesStructurePreview({
+  smiles,
+  loadingText = "Rendering preview...",
+  errorText = "Unable to render structure preview",
+  testId
+}: SmilesStructurePreviewProps) {
   const [svg, setSvg] = useState<string | null>(svgCache.get(smiles) ?? null);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +30,7 @@ export function SmilesHoverPreview({ smiles, children }: SmilesHoverPreviewProps
   }, [smiles]);
 
   useEffect(() => {
-    if (!open || !smiles.trim() || svgCache.has(smiles)) {
+    if (!smiles.trim() || svgCache.has(smiles)) {
       return;
     }
 
@@ -34,7 +46,7 @@ export function SmilesHoverPreview({ smiles, children }: SmilesHoverPreviewProps
         setSvg(response.svg);
       } catch (previewError) {
         if (!cancelled) {
-          setError(previewError instanceof Error ? previewError.message : "Unable to render structure preview");
+          setError(previewError instanceof Error ? previewError.message : errorText);
         }
       }
     };
@@ -43,28 +55,61 @@ export function SmilesHoverPreview({ smiles, children }: SmilesHoverPreviewProps
     return () => {
       cancelled = true;
     };
-  }, [open, smiles]);
+  }, [errorText, smiles]);
+
+  if (svg) {
+    return <div className="smiles-hover-preview-canvas" data-testid={testId} dangerouslySetInnerHTML={{ __html: svg }} />;
+  }
+
+  if (error) {
+    return <p className="muted">{error}</p>;
+  }
+
+  return <p className="muted">{loadingText}</p>;
+}
+
+export function SmilesHoverPreview({ smiles, children }: SmilesHoverPreviewProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const popoverWidth = 300;
+      let calculatedLeft = rect.left + window.scrollX - (popoverWidth - rect.width) / 2;
+      const margin = 12;
+      if (calculatedLeft < margin) calculatedLeft = margin;
+      if (calculatedLeft + popoverWidth > window.innerWidth - margin) {
+        calculatedLeft = window.innerWidth - popoverWidth - margin;
+      }
+      setCoords({
+        top: rect.bottom + window.scrollY + 10,
+        left: calculatedLeft
+      });
+    }
+  }, [open]);
 
   return (
     <div
+      ref={triggerRef}
       className="smiles-hover-preview"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
       {children}
-      {open ? (
-        <div className="smiles-hover-preview-popover" data-testid="smiles-hover-preview">
+      {open && typeof document !== "undefined" ? createPortal(
+        <div 
+          className="smiles-hover-preview-popover" 
+          data-testid="smiles-hover-preview"
+          style={{ position: 'absolute', top: `${coords.top}px`, left: `${coords.left}px`, zIndex: 99999 }}
+        >
           <div className="smiles-hover-preview-header">
             <span className="workspace-kicker">Structure Preview</span>
           </div>
-          {svg ? (
-            <div className="smiles-hover-preview-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
-          ) : error ? (
-            <p className="muted">{error}</p>
-          ) : (
-            <p className="muted">Rendering preview...</p>
-          )}
-        </div>
+          <SmilesStructurePreview smiles={smiles} />
+        </div>,
+        document.body
       ) : null}
     </div>
   );

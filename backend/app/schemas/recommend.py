@@ -16,6 +16,8 @@ class SimilarCoreRecommendationItem(BaseModel):
     score: float
     support_count: int
     reason: str
+    compound_ids: list[int] = Field(default_factory=list)
+    exact_match: bool = False
 
 
 class RGroupRecommendationRequest(BaseModel):
@@ -28,6 +30,26 @@ class RGroupRecommendationItem(BaseModel):
     rgroup_smiles: str
     count: int
     reason: str
+    compound_ids: list[int] = Field(default_factory=list)
+    exact_match: bool = False
+
+
+class ExactCoreRGroupRecommendationRequest(BaseModel):
+    query_smiles: str = Field(min_length=1)
+    attachment_points: list[str] = Field(default_factory=list)
+    k: int = Field(default=20, ge=1, le=100)
+
+
+class ExactCoreRGroupRecommendationColumn(BaseModel):
+    attachment_point: str
+    items: list[RGroupRecommendationItem]
+
+
+class ExactCoreRGroupRecommendationResponse(BaseModel):
+    query_core_smiles: str
+    attachment_points: list[str]
+    exact_core_found: bool
+    columns: list[ExactCoreRGroupRecommendationColumn]
 
 
 class ApplyModificationRequest(BaseModel):

@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../api/client";
 import {
   deleteCompounds,
-  getCompoundRGroups,
+  getCompoundDetail,
   getCompounds,
+  getCoreCandidateRGroups,
   getPatentCodes,
   reprocessCompounds,
   type CompoundBrowserItem,
-  type CompoundRGroupItem
+  type CompoundCoreCandidateItem,
+  type CompoundCoreCandidateRGroupItem
 } from "../api/patents";
 
 const PAGE_SIZE = 50;
-type SidebarTab = "overview" | "rgroups";
 
 export function CompoundBrowserPage() {
   const [items, setItems] = useState<CompoundBrowserItem[]>([]);
@@ -25,8 +26,11 @@ export function CompoundBrowserPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCompound, setSelectedCompound] = useState<CompoundBrowserItem | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("overview");
-  const [rGroupItems, setRGroupItems] = useState<CompoundRGroupItem[]>([]);
+  const [coreCandidates, setCoreCandidates] = useState<CompoundCoreCandidateItem[]>([]);
+  const [selectedCoreCandidate, setSelectedCoreCandidate] = useState<CompoundCoreCandidateItem | null>(null);
+  const [rGroupItems, setRGroupItems] = useState<CompoundCoreCandidateRGroupItem[]>([]);
+  const [scaffoldsLoading, setScaffoldsLoading] = useState(false);
+  const [scaffoldsError, setScaffoldsError] = useState<string | null>(null);
   const [rGroupsLoading, setRGroupsLoading] = useState(false);
   const [rGroupsError, setRGroupsError] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
@@ -91,7 +95,56 @@ export function CompoundBrowserPage() {
   }, [offset, reloadKey, selectedPatentCode]);
 
   useEffect(() => {
-    if (selectedCompound == null || sidebarTab !== "rgroups") {
+    if (selectedCompound == null) {
+      setCoreCandidates([]);
+      setSelectedCoreCandidate(null);
+      setRGroupItems([]);
+      setScaffoldsError(null);
+      setRGroupsError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCompoundDetail = async () => {
+      setScaffoldsLoading(true);
+      setScaffoldsError(null);
+      try {
+        const response = await getCompoundDetail(selectedCompound.compound_id);
+        if (cancelled) {
+          return;
+        }
+        setSelectedCompound(response.compound);
+        setCoreCandidates(response.core_candidates);
+        setSelectedCoreCandidate((current) => {
+          if (current == null) {
+            return response.core_candidates[0] ?? null;
+          }
+          return response.core_candidates.find((item) => item.id === current.id) ?? response.core_candidates[0] ?? null;
+        });
+      } catch (loadError) {
+        if (!cancelled) {
+          setScaffoldsError(loadError instanceof Error ? loadError.message : "Failed to load scaffolds");
+          setCoreCandidates([]);
+          setSelectedCoreCandidate(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setScaffoldsLoading(false);
+        }
+      }
+    };
+
+    void loadCompoundDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCompound?.compound_id]);
+
+  useEffect(() => {
+    if (selectedCoreCandidate == null) {
+      setRGroupItems([]);
+      setRGroupsError(null);
       return;
     }
 
@@ -101,13 +154,13 @@ export function CompoundBrowserPage() {
       setRGroupsLoading(true);
       setRGroupsError(null);
       try {
-        const response = await getCompoundRGroups(selectedCompound.compound_id);
+        const response = await getCoreCandidateRGroups(selectedCoreCandidate.id);
         if (!cancelled) {
           setRGroupItems(response.items);
         }
       } catch (loadError) {
         if (!cancelled) {
-          setRGroupsError(loadError instanceof Error ? loadError.message : "Failed to load child rows");
+          setRGroupsError(loadError instanceof Error ? loadError.message : "Failed to load R-groups");
           setRGroupItems([]);
         }
       } finally {
@@ -121,7 +174,7 @@ export function CompoundBrowserPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedCompound, sidebarTab]);
+  }, [selectedCoreCandidate?.id]);
 
   useEffect(() => {
     if (zoomedImage == null) {
@@ -152,12 +205,21 @@ export function CompoundBrowserPage() {
     setSelectedIds([]);
   };
 
-  const openSidebar = (compound: CompoundBrowserItem, tab: SidebarTab) => {
+  const openScaffoldInspect = (compound: CompoundBrowserItem) => {
     setSelectedCompound(compound);
-    setSidebarTab(tab);
-    if (tab === "overview") {
-      setRGroupsError(null);
-    }
+    setSelectedCoreCandidate(null);
+    setRGroupItems([]);
+    setScaffoldsError(null);
+    setRGroupsError(null);
+  };
+
+  const closeInspect = () => {
+    setSelectedCompound(null);
+    setSelectedCoreCandidate(null);
+    setCoreCandidates([]);
+    setRGroupItems([]);
+    setScaffoldsError(null);
+    setRGroupsError(null);
   };
 
   const openImageZoom = (imageUrl: string, alt: string) => {
@@ -189,6 +251,7 @@ export function CompoundBrowserPage() {
       const response = await deleteCompounds(selectedIds);
       setMessage(`Deleted ${response.affected_count} compound(s).`);
       refresh();
+      closeInspect();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Failed to delete compounds");
     }
@@ -205,6 +268,7 @@ export function CompoundBrowserPage() {
       const response = await reprocessCompounds(selectedIds);
       setMessage(`Queued selected compounds for reprocessing. Job ${response.job_id}.`);
       refresh();
+      closeInspect();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Failed to reprocess compounds");
     }
@@ -217,7 +281,7 @@ export function CompoundBrowserPage() {
           <div>
             <h2>Existing compounds</h2>
             <p className="muted">
-              Browse stored compounds and filter by patent. Total matching compounds: <strong>{total}</strong>
+              Browse stored compounds and inspect scaffold decompositions. Total matching compounds: <strong>{total}</strong>
             </p>
           </div>
           <div className="browser-actions">
@@ -253,7 +317,11 @@ export function CompoundBrowserPage() {
         {error && <p className="status-error">{error}</p>}
       </section>
 
-      <div className={`compound-browser-layout ${selectedCompound ? "with-sidebar" : "without-sidebar"}`}>
+      <div
+        className={`compound-browser-layout ${
+          selectedCompound ? (selectedCoreCandidate ? "with-two-sidebars" : "with-sidebar") : "without-sidebar"
+        }`}
+      >
         <section className="panel compound-browser-main">
           <div className="browser-pagination">
             <button type="button" onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0 || loading}>
@@ -292,14 +360,10 @@ export function CompoundBrowserPage() {
                     <th>Image</th>
                     <th>Compound ID</th>
                     <th>Patent</th>
-                    <th>Validation</th>
                     <th>Embedding</th>
                     <th>Duplicate</th>
                     <th>Canonical SMILES</th>
-                    <th>Murcko Scaffold</th>
-                    <th>Reduced Core</th>
-                    <th>Child DB</th>
-                    <th>Inspect</th>
+                    <th>Inspect scaffolds</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -333,13 +397,6 @@ export function CompoundBrowserPage() {
                         <strong>{item.patent_code}</strong>
                         <div className="table-subtext">{new Date(item.updated_at).toLocaleString()}</div>
                       </td>
-                      <td>
-                        <div className="badge-row">
-                          <span className="badge">{item.processing_status}</span>
-                          {item.validation_status && <span className="badge">{item.validation_status}</span>}
-                          {item.is_compound === false && <span className="badge badge-danger">non-compound</span>}
-                        </div>
-                      </td>
                       <td>{item.has_embedding ? "Yes" : "No"}</td>
                       <td>
                         {item.is_duplicate_within_patent ? (
@@ -349,17 +406,11 @@ export function CompoundBrowserPage() {
                         )}
                       </td>
                       <td className="compound-smiles-cell">{item.canonical_smiles || item.smiles || "No SMILES yet"}</td>
-                      <td className="compound-smiles-cell">{item.murcko_scaffold_smiles || "No scaffold"}</td>
-                      <td className="compound-smiles-cell">{item.reduced_core || "No reduced core"}</td>
                       <td>
-                        <button className="secondary-button small" type="button" onClick={() => openSidebar(item, "rgroups")}>
-                          View child DB
+                        <button className="secondary-button small" type="button" onClick={() => openScaffoldInspect(item)}>
+                          Inspect scaffolds
                         </button>
-                      </td>
-                      <td>
-                        <button className="secondary-button small" type="button" onClick={() => openSidebar(item, "overview")}>
-                          Open sidebar
-                        </button>
+                        <div className="table-subtext">{item.core_candidate_count} scaffold candidate(s)</div>
                         {item.last_error && <p className="status-error compound-row-error">{item.last_error}</p>}
                       </td>
                     </tr>
@@ -374,119 +425,74 @@ export function CompoundBrowserPage() {
           <aside className="panel compound-sidebar">
             <div className="compound-sidebar-header">
               <div>
-                <h3>Compound #{selectedCompound.compound_id}</h3>
-                <p className="muted">Patent {selectedCompound.patent_code}</p>
+                <h3>Inspect scaffolds</h3>
+                <p className="muted">
+                  Compound #{selectedCompound.compound_id} · {selectedCompound.patent_code}
+                </p>
               </div>
-              <button className="secondary-button small" type="button" onClick={() => setSelectedCompound(null)}>
+              <button className="secondary-button small" type="button" onClick={closeInspect}>
                 Close
               </button>
             </div>
 
-            <div className="compound-sidebar-tabs" role="tablist" aria-label="Compound details tabs">
-              <button
-                type="button"
-                className={sidebarTab === "overview" ? "active" : ""}
-                onClick={() => setSidebarTab("overview")}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                className={sidebarTab === "rgroups" ? "active" : ""}
-                onClick={() => setSidebarTab("rgroups")}
-              >
-                Child DB
-              </button>
+            <div className="compound-sidebar-body">
+              {scaffoldsLoading ? (
+                <p className="muted">Loading scaffold candidates...</p>
+              ) : scaffoldsError ? (
+                <p className="status-error">{scaffoldsError}</p>
+              ) : coreCandidates.length === 0 ? (
+                <p className="muted">No scaffold candidates stored for this compound.</p>
+              ) : (
+                <div className="scaffold-list">
+                  {coreCandidates.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      className={`scaffold-list-item ${selectedCoreCandidate?.id === candidate.id ? "active" : ""}`}
+                      onClick={() => setSelectedCoreCandidate(candidate)}
+                    >
+                      <span className="scaffold-list-kicker">
+                        {candidate.is_selected ? "Selected" : `Candidate ${candidate.candidate_rank}`}
+                      </span>
+                      <span className="scaffold-list-smiles">{candidate.core_smiles || "No core SMILES"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {selectedCompound && selectedCoreCandidate && (
+          <aside className="panel compound-sidebar secondary">
+            <div className="compound-sidebar-header">
+              <div>
+                <h3>Attached R-groups</h3>
+                <p className="muted">{selectedCoreCandidate.core_smiles || "No core SMILES"}</p>
+              </div>
             </div>
 
-            {sidebarTab === "overview" ? (
-              <div className="compound-sidebar-body">
-                <button
-                  className="image-zoom-trigger compound-sidebar-image-button"
-                  type="button"
-                  onClick={() => openImageZoom(selectedCompound.image_url, `Compound ${selectedCompound.compound_id}`)}
-                >
-                  <img
-                    className="compound-row-image large compound-sidebar-image"
-                    src={`${API_BASE_URL}${selectedCompound.image_url}`}
-                    alt={`Compound ${selectedCompound.compound_id}`}
-                  />
-                </button>
-                <button
-                  className="secondary-button small image-zoom-button"
-                  type="button"
-                  onClick={() => openImageZoom(selectedCompound.image_url, `Compound ${selectedCompound.compound_id}`)}
-                >
-                  Zoom image
-                </button>
+            <div className="compound-sidebar-body">
+              {rGroupsLoading ? (
+                <p className="muted">Loading R-groups...</p>
+              ) : rGroupsError ? (
+                <p className="status-error">{rGroupsError}</p>
+              ) : rGroupItems.length === 0 ? (
+                <p className="muted">No R-groups stored for this scaffold candidate.</p>
+              ) : (
                 <div className="detail-grid">
-                  <DetailRow label="Processing status" value={selectedCompound.processing_status} />
-                  <DetailRow label="Validation status" value={selectedCompound.validation_status} />
-                  <DetailRow
-                    label="Is compound"
-                    value={
-                      selectedCompound.is_compound == null ? "Unknown" : selectedCompound.is_compound ? "Yes" : "No"
-                    }
-                  />
-                  <DetailRow label="Canonical SMILES" value={selectedCompound.canonical_smiles || selectedCompound.smiles} multiline />
-                  <DetailRow label="Murcko scaffold" value={selectedCompound.murcko_scaffold_smiles} multiline />
-                  <DetailRow label="Reduced core" value={selectedCompound.reduced_core} multiline />
-                  <DetailRow label="Core SMILES" value={selectedCompound.core_smiles} multiline />
-                  <DetailRow label="Core SMARTS" value={selectedCompound.core_smarts} multiline />
-                  <DetailRow
-                    label="Duplicate within patent"
-                    value={
-                      selectedCompound.is_duplicate_within_patent
-                        ? `Yes, of #${selectedCompound.duplicate_of_compound_id ?? "unknown"}`
-                        : "No"
-                    }
-                  />
-                  <DetailRow
-                    label="Kept for series analysis"
-                    value={selectedCompound.kept_for_series_analysis ? "Yes" : "No"}
-                  />
-                  <DetailRow label="Validation error" value={selectedCompound.validation_error} multiline />
-                  <DetailRow label="Last error" value={selectedCompound.last_error} multiline />
-                  <DetailRow label="Pipeline version" value={selectedCompound.pipeline_version} />
-                  <DetailRow label="Patent URL" value={selectedCompound.patent_source_url} multiline link />
-                  <DetailRow label="Created" value={new Date(selectedCompound.created_at).toLocaleString()} />
-                  <DetailRow label="Updated" value={new Date(selectedCompound.updated_at).toLocaleString()} />
+                  {rGroupItems.map((row, index) => (
+                    <div className="detail-row" key={`${row.core_candidate_id}-${row.r_label}-${index}`}>
+                      <span className="detail-label">
+                        {row.r_label}
+                        {row.attachment_index != null ? ` · attachment ${row.attachment_index}` : ""}
+                      </span>
+                      <span className="detail-value multiline">{row.r_group_smiles}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ) : (
-              <div className="compound-sidebar-body">
-                {rGroupsLoading ? (
-                  <p className="muted">Loading child database rows...</p>
-                ) : rGroupsError ? (
-                  <p className="status-error">{rGroupsError}</p>
-                ) : rGroupItems.length === 0 ? (
-                  <p className="muted">No child rows stored for this compound.</p>
-                ) : (
-                  <div className="child-db-table-wrap">
-                    <table className="compound-table child-db-table">
-                      <thead>
-                        <tr>
-                          <th>R Label</th>
-                          <th>R Group</th>
-                          <th>Core SMILES</th>
-                          <th>Core SMARTS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rGroupItems.map((row, index) => (
-                          <tr key={`${row.compound_id}-${row.r_label}-${index}`}>
-                            <td>{row.r_label}</td>
-                            <td className="compound-smiles-cell">{row.r_group}</td>
-                            <td className="compound-smiles-cell">{row.core_smiles || "n/a"}</td>
-                            <td className="compound-smiles-cell">{row.core_smarts || "n/a"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </aside>
         )}
       </div>
@@ -531,29 +537,5 @@ export function CompoundBrowserPage() {
         </div>
       )}
     </>
-  );
-}
-
-type DetailRowProps = {
-  label: string;
-  value?: string | null;
-  multiline?: boolean;
-  link?: boolean;
-};
-
-function DetailRow({ label, value, multiline = false, link = false }: DetailRowProps) {
-  const displayValue = value?.trim() ? value : "n/a";
-
-  return (
-    <div className="detail-row">
-      <span className="detail-label">{label}</span>
-      {link && displayValue !== "n/a" ? (
-        <a className={multiline ? "detail-value multiline" : "detail-value"} href={displayValue} target="_blank" rel="noreferrer">
-          {displayValue}
-        </a>
-      ) : (
-        <span className={multiline ? "detail-value multiline" : "detail-value"}>{displayValue}</span>
-      )}
-    </div>
   );
 }

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
-from app.models.compound_r_group import CompoundRGroup
+from app.models.compound_core_candidate import CompoundCoreCandidate
+from app.models.compound_core_candidate_r_group import CompoundCoreCandidateRGroup
 from app.models.patent import Patent
 from app.services.core_recommendation_service import SimilarCoreResult
 from app.services.rgroup_recommendation_service import RGroupRecommendationService
@@ -29,11 +30,20 @@ def test_rgroup_recommendation_prefers_exact_core_matches(session_factory):
 
         session.add_all(
             [
-                CompoundRGroup(compound_id=1, patent_id=patent.id, core_smiles="core-a", core_smarts="*", r_label="R1", r_group="Cl[*:1]"),
-                CompoundRGroup(compound_id=2, patent_id=patent.id, core_smiles="core-a", core_smarts="*", r_label="R1", r_group="Cl[*:1]"),
-                CompoundRGroup(compound_id=3, patent_id=patent.id, core_smiles="core-a", core_smarts="*", r_label="R1", r_group="F[*:1]"),
-                CompoundRGroup(compound_id=4, patent_id=patent.id, core_smiles="core-b", core_smarts="*", r_label="R1", r_group="Br[*:1]"),
-                CompoundRGroup(compound_id=5, patent_id=patent.id, core_smiles="core-b", core_smarts="*", r_label="R1", r_group="Br[*:1]"),
+                CompoundCoreCandidate(id=101, compound_id=1, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-a", core_smarts="*", reduced_core="core-a"),
+                CompoundCoreCandidate(id=102, compound_id=2, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-a", core_smarts="*", reduced_core="core-a"),
+                CompoundCoreCandidate(id=103, compound_id=3, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-a", core_smarts="*", reduced_core="core-a"),
+                CompoundCoreCandidate(id=104, compound_id=4, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-b", core_smarts="*", reduced_core="core-b"),
+                CompoundCoreCandidate(id=105, compound_id=5, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-b", core_smarts="*", reduced_core="core-b"),
+            ]
+        )
+        session.add_all(
+            [
+                CompoundCoreCandidateRGroup(core_candidate_id=101, compound_id=1, patent_id=patent.id, r_label="R1", r_group_smiles="Cl[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=102, compound_id=2, patent_id=patent.id, r_label="R1", r_group_smiles="Cl[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=103, compound_id=3, patent_id=patent.id, r_label="R1", r_group_smiles="F[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=104, compound_id=4, patent_id=patent.id, r_label="R1", r_group_smiles="Br[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=105, compound_id=5, patent_id=patent.id, r_label="R1", r_group_smiles="Br[*:1]", attachment_index=1),
             ]
         )
         session.commit()
@@ -72,10 +82,18 @@ def test_rgroup_recommendation_uses_fallback_when_exact_core_is_sparse(session_f
 
         session.add_all(
             [
-                CompoundRGroup(compound_id=10, patent_id=patent.id, core_smiles="core-a", core_smarts="*", r_label="R1", r_group="Cl[*:1]"),
-                CompoundRGroup(compound_id=11, patent_id=patent.id, core_smiles="core-b", core_smarts="*", r_label="R1", r_group="O[*:1]"),
-                CompoundRGroup(compound_id=12, patent_id=patent.id, core_smiles="core-b", core_smarts="*", r_label="R1", r_group="O[*:1]"),
-                CompoundRGroup(compound_id=13, patent_id=patent.id, core_smiles="core-c", core_smarts="*", r_label="R1", r_group="N[*:1]"),
+                CompoundCoreCandidate(id=201, compound_id=10, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-a", core_smarts="*", reduced_core="core-a"),
+                CompoundCoreCandidate(id=202, compound_id=11, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-b", core_smarts="*", reduced_core="core-b"),
+                CompoundCoreCandidate(id=203, compound_id=12, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-b", core_smarts="*", reduced_core="core-b"),
+                CompoundCoreCandidate(id=204, compound_id=13, patent_id=patent.id, candidate_rank=1, is_selected=True, core_smiles="core-c", core_smarts="*", reduced_core="core-c"),
+            ]
+        )
+        session.add_all(
+            [
+                CompoundCoreCandidateRGroup(core_candidate_id=201, compound_id=10, patent_id=patent.id, r_label="R1", r_group_smiles="Cl[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=202, compound_id=11, patent_id=patent.id, r_label="R1", r_group_smiles="O[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=203, compound_id=12, patent_id=patent.id, r_label="R1", r_group_smiles="O[*:1]", attachment_index=1),
+                CompoundCoreCandidateRGroup(core_candidate_id=204, compound_id=13, patent_id=patent.id, r_label="R1", r_group_smiles="N[*:1]", attachment_index=1),
             ]
         )
         session.commit()

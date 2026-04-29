@@ -8,6 +8,8 @@ from sqlmodel import Field, SQLModel
 
 class CompoundRGroup(SQLModel, table=True):
     __tablename__ = "compound_r_group"
+    # Deprecated legacy table retained only so historical rows can be migrated
+    # into CompoundCoreCandidateRGroup and downgraded if needed.
 
     id: Optional[int] = Field(default=None, primary_key=True)
     compound_id: int = Field(foreign_key="compoundimage.id", index=True)

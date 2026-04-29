@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
+from app.db.migrations.normalize_core_candidates import upgrade as upgrade_core_candidate_normalization
 from app.db.session import create_db_and_tables, engine
 
 
@@ -45,10 +46,6 @@ def init_db() -> None:
             "kept_for_series_analysis",
             "kept_for_series_analysis BOOLEAN DEFAULT 0",
         )
-        _ensure_column(connection, "compoundimage", "murcko_scaffold_smiles", "murcko_scaffold_smiles TEXT")
-        _ensure_column(connection, "compoundimage", "reduced_core", "reduced_core TEXT")
-        _ensure_column(connection, "compoundimage", "core_smiles", "core_smiles TEXT")
-        _ensure_column(connection, "compoundimage", "core_smarts", "core_smarts TEXT")
         _drop_column(connection, "compoundimage", "core_match_status")
         _ensure_column(connection, "compoundimage", "pipeline_version", "pipeline_version TEXT")
 
@@ -72,3 +69,8 @@ def init_db() -> None:
                 """
             )
         )
+        upgrade_core_candidate_normalization(connection)
+        _drop_column(connection, "compoundimage", "murcko_scaffold_smiles")
+        _drop_column(connection, "compoundimage", "reduced_core")
+        _drop_column(connection, "compoundimage", "core_smiles")
+        _drop_column(connection, "compoundimage", "core_smarts")
